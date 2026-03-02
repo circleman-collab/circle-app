@@ -366,7 +366,6 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
 
   return(
     <div style={{position:"relative",zIndex:60}}>
-      {/* The tab itself */}
       <div
         onClick={()=>setOpen(o=>!o)}
         style={{
@@ -374,17 +373,14 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
           padding:"0 18px",height:32,
           background:open?INK:BG,
           borderBottom:"1.5px solid "+(open?INK:INK_LIGHT),
-          borderTop: open?"none":"none",
           cursor:"pointer",
           transition:"background 0.15s",
           position:"relative",
         }}
       >
-        {/* Folder tab shape — left curved notch */}
         <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,pointerEvents:"none",overflow:"hidden"}}>
           <svg width="100%" height="32" style={{position:"absolute",top:0,left:0}}>
             <rect x="0" y="0" width="100%" height="32" fill={open?INK:BG}/>
-            {/* subtle top border arc */}
             <path d="M 0 2 Q 8 0 16 0 L 100% 0 L 100% 32 L 0 32 Z" fill={open?INK:BG}/>
           </svg>
         </div>
@@ -408,7 +404,6 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
         </div>
       </div>
 
-      {/* Dropdown */}
       {open&&(
         <div style={{
           position:"absolute",top:"100%",left:0,right:0,
@@ -416,7 +411,6 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
           boxShadow:"0 4px 0 "+INK_LIGHT,
           zIndex:100,maxHeight:280,overflowY:"auto",
         }}>
-          {/* Current status indicator */}
           {hasStatus&&(
             <div style={{padding:"8px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Active</span>
@@ -424,7 +418,6 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
             </div>
           )}
 
-          {/* Presets */}
           {presets.map((p,i)=>{
             var isActive=p===currentStatus;
             return(
@@ -458,7 +451,6 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
             );
           })}
 
-          {/* Add custom */}
           {addingCustom?(
             <div style={{padding:"10px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:8,alignItems:"center"}}>
               <input
@@ -635,6 +627,7 @@ export default function App(){
   var [drawPhase,setDrawPhase]=useState("idle");
   var [drawPath,setDrawPath]=useState([]);
   var [liveRadius,setLiveRadius]=useState(0);
+  var [circleScale,setCircleScale]=useState(1); // NEW: for animate-in on radius reveal
   var [selectedChat,setSelectedChat]=useState(null);
   var [joinTarget,setJoinTarget]=useState(null);
   var [msgInput,setMsgInput]=useState("");
@@ -799,18 +792,48 @@ export default function App(){
   const cancelPulseHold=useCallback(()=>{if(pulseState!=="charging")return;cancelAnimationFrame(pulseHoldRaf.current);var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);if(p>=.8){firePulse();}else{setPulseState("idle");setHoldProgress(0);}},[pulseState,firePulse]);
 
   function toSVG(cx,cy){var rect=svgRef.current.getBoundingClientRect();return{x:(cx-rect.left)*(350/rect.width),y:(cy-rect.top)*(420/rect.height)};}
+
+  // CHANGED: onDrawStart - just start fresh, no circle yet
   const onDrawStart=useCallback((e)=>{e.preventDefault();setDrawPhase("drawing");setDrawPath([]);setLiveRadius(0);},[]);
-  const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);setLiveRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2))));},[]);
-  const onDrawEnd=useCallback(()=>{setDrawPhase("done");setLiveRadius(p=>{var c=Math.max(MIN_R,Math.min(MAX_R,p));setRadius(c);return p;});},[]);
+
+  // CHANGED: onDrawMove - track path only, no live circle preview
+  const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
+
+  // CHANGED: onDrawEnd - fit circle from avg distance, then animate it in
+  const onDrawEnd=useCallback(()=>{
+    setDrawPhase("done");
+    setDrawPath(path=>{
+      if(path.length>0){
+        var avg=path.reduce((sum,p)=>sum+Math.sqrt((p.x-CX)**2+(p.y-CY)**2),0)/path.length;
+        var fitted=Math.max(MIN_R,Math.min(MAX_R,avg));
+        setRadius(fitted);
+        setCircleScale(0);
+        requestAnimationFrame(()=>{
+          var start=performance.now(),dur=400;
+          function tick(){
+            var t=Math.min(1,(performance.now()-start)/dur);
+            var eased=1-Math.pow(1-t,3);
+            setCircleScale(eased);
+            if(t<1)requestAnimationFrame(tick);
+          }
+          requestAnimationFrame(tick);
+        });
+      }
+      return path;
+    });
+  },[]);
+
   const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(22));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
   const onMapDown=useCallback((e)=>{if(drawPhase==="idle"){onDrawStart(e);return;}if(drawPhase==="drawing")return;if(drawPhase==="done"){var c=e.touches?e.touches[0]:e;startPlantHold(toSVG(c.clientX,c.clientY));}},[drawPhase,onDrawStart,startPlantHold]);
   const onMapMove=useCallback((e)=>{if(drawPhase==="drawing"){onDrawMove(e);return;}if(dragging.current&&svgRef.current){var c=e.touches?e.touches[0]:e;var rect=svgRef.current.getBoundingClientRect();var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));}},[drawPhase,onDrawMove]);
   const onMapUp=useCallback(()=>{if(drawPhase==="drawing"){onDrawEnd();return;}dragging.current=false;cancelPlantHold();},[drawPhase,onDrawEnd,cancelPlantHold]);
 
+  // CHANGED: resetRadius also resets circleScale
+  function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);}
+
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
-  function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);}
   function handleChatClick(chat){if(chat.type==="hidden"&&!joinedIds.has(chat.id)){setJoinTarget(chat);return;}setSelectedChat(chat);}
   function handleJoined(chat){setJoinedIds(prev=>new Set([...prev,chat.id]));setJoinTarget(null);if(chat.msgs!==undefined)setSelectedChat(chat);}
   function handleRequestSent(chatId,req){setAllChats(prev=>prev.map(c=>c.id===chatId?{...c,pendingRequests:[...(c.pendingRequests||[]),req]}:c));}
@@ -902,13 +925,13 @@ export default function App(){
     </div>
 
     {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
-      {/* Status folder tab — only on map */}
       <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
 
       <div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:36}}>
         <span style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Radius</span>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:10,fontWeight:900,color:INK}}>{hasRadius?(radiusMiles+" mi · "+visibleChats.length+" visible"):isDrawing?(((liveRadius/MAX_R)*2).toFixed(1)+" mi"):"draw your circle"}</span>
+          {/* CHANGED: removed live radius display during drawing since we no longer track liveRadius */}
+          <span style={{fontSize:10,fontWeight:900,color:INK}}>{hasRadius?(radiusMiles+" mi · "+visibleChats.length+" visible"):""}</span>
           {hasRadius&&<button onClick={resetRadius} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"3px 8px"}}>Redraw</button>}
         </div>
       </div>
@@ -920,9 +943,9 @@ export default function App(){
           <rect x="0" y="0" width="350" height="420" fill={BG}/>
           {[70,130,190,250].map(r=><circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={INK_LIGHT} strokeWidth="0.8"/>)}
           {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
-          {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.5" strokeDasharray="4 3" opacity="0.5"/>}
-          {isDrawing&&liveRadius>0&&<path d={wobblyPath(CX,CY,liveRadius,3.7)} fill={INK} fillOpacity="0.03" stroke={INK} strokeWidth="1.5" strokeDasharray="5 4"/>}
-          {hasRadius&&(<g>
+          {/* CHANGED: show freehand path during drawing only, no wobbly circle preview */}
+          {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7"/>}
+          {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
             <path d={wobblyPath(CX,CY,radius,3.7)} fill={INK} fillOpacity="0.04"/>
             <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke="transparent" strokeWidth="28" style={{cursor:"grab"}} onMouseDown={e=>{dragging.current=true;e.preventDefault();e.stopPropagation();}} onTouchStart={e=>{dragging.current=true;e.stopPropagation();}}/>
             <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke={INK} strokeWidth="2" style={{pointerEvents:"none"}}/>
@@ -995,7 +1018,6 @@ export default function App(){
           <div onClick={()=>setCurrentUser(u=>({...u,pulseCheck:!u.pulseCheck}))} style={{width:36,height:20,borderRadius:10,background:currentUser.pulseCheck?INK:INK_LIGHT,position:"relative",cursor:"pointer",transition:"background 0.15s",flexShrink:0}}><div style={{position:"absolute",top:3,left:currentUser.pulseCheck?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
         </div>
 
-        {/* Status quick-access on pulse tab */}
         <div style={{width:"100%",padding:"14px 16px",border:"1.5px solid "+INK_LIGHT,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:3}}>Your Status</div>
