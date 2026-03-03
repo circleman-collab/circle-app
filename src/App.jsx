@@ -467,8 +467,6 @@ function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*
 
 function FistIcon({size=12,color=INK}){var lo=color===BG||color==="white"?"rgba(0,0,0,0.15)":"rgba(255,255,255,0.2)";return(<svg width={size} height={size} viewBox="0 0 24 28" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}><path d="M 5 14 L 5 9 Q 5 7 7 7 L 10 7 Q 10 5 12 5 L 13 5 Q 15 5 15 7 L 17 7 Q 19 7 19 9 L 19 11 Q 19 13 17 13 L 17 14 Q 17 16 15 16 L 7 16 Q 5 16 5 14 Z" fill={color}/><path d="M 5 13 Q 3 12 2 10 Q 1 8 3 8 Q 5 8 6 10 L 6 13 Z" fill={color}/><path d="M 5 16 Q 5 20 6 22 L 18 22 Q 19 20 19 16 Q 17 16 15 16 L 7 16 Q 5 16 5 16 Z" fill={color}/><line x1="8" y1="7.5" x2="8" y2="10" stroke={lo} strokeWidth="0.8"/><line x1="12" y1="5.5" x2="12" y2="9" stroke={lo} strokeWidth="0.8"/><line x1="16" y1="7.5" x2="16" y2="10" stroke={lo} strokeWidth="0.8"/></svg>);}
 
-// ── Interest Match Pip — rendered directly on the map SVG ─────────────────────
-// Returns SVG elements; must be used inside the map <svg>
 function InterestMatchPip({circle, cx, cy, userTags, onDismiss, onGo}) {
   var [pipPulse, setPipPulse] = useState(0);
   var rafRef = useRef(null);
@@ -488,16 +486,16 @@ function InterestMatchPip({circle, cx, cy, userTags, onDismiss, onGo}) {
     return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
-  // Pip sits at top-right of the marker
   var px = x + 8, py = y - 8;
 
   return (
-    <g style={{pointerEvents:"auto",cursor:"pointer"}} onClick={() => onGo(circle)}>
+    <g>
       {/* Pulsing halo */}
       <circle cx={px} cy={py} r={6 + pipPulse * 4} fill="none" stroke={color}
         strokeWidth="0.8" opacity={0.3 * (1 - pipPulse)} style={{pointerEvents:"none"}}/>
-      {/* Pip dot */}
-      <circle cx={px} cy={py} r={4.5} fill={color} opacity={0.9}/>
+      {/* Pip dot — tap to go, long-press area around it to dismiss */}
+      <circle cx={px} cy={py} r={4.5} fill={color} opacity={0.9}
+        style={{cursor:"pointer",pointerEvents:"auto"}} onClick={(e)=>{e.stopPropagation();onGo(circle);}}/>
       {/* Shared tag count */}
       <text x={px} y={py + 1.5} textAnchor="middle" dominantBaseline="middle"
         fontSize="5" fontWeight="900" fill={BG} fontFamily={font}
@@ -507,10 +505,8 @@ function InterestMatchPip({circle, cx, cy, userTags, onDismiss, onGo}) {
 }
 
 // ── Radius edge label ─────────────────────────────────────────────────────────
-// Renders the "X mi · Y visible" label anchored to the bottom of the wobble ring
 function RadiusEdgeLabel({cx, cy, radius, radiusMiles, visibleCount}) {
   if (!radius) return null;
-  // Bottom of ring = cy + radius (approx, wobble adds ~2px so add a small offset)
   var lx = cx;
   var ly = cy + radius + 14;
   return (
@@ -523,7 +519,7 @@ function RadiusEdgeLabel({cx, cy, radius, radiusMiles, visibleCount}) {
   );
 }
 
-function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,interestMatch,userTags,onMatchGo}){
+function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,interestMatch,userTags,onMatchGo,onMatchDismiss}){
   var R=10,color=DRAFT_COLORS[chat.id]||INK;
   var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
   var inRange=radius===null||chat.r<=radius,baseOp=inRange?1:0.2;
@@ -548,7 +544,7 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,intere
     {chat.type==="closed"&&<circle cx={x} cy={y} r={R} fill={BG} stroke={color} strokeWidth="2"/>}
     <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inRange?1:0.3}>{chat.name.toUpperCase()}</text>
     {/* Interest match pip rendered here, inside the marker group */}
-    {interestMatch&&<InterestMatchPip circle={chat} cx={cx} cy={cy} userTags={userTags||[]} onDismiss={()=>{}} onGo={onMatchGo}/>}
+    {interestMatch&&<InterestMatchPip circle={chat} cx={cx} cy={cy} userTags={userTags||[]} onDismiss={onMatchDismiss} onGo={onMatchGo}/>}
   </g>);
 }
 
@@ -973,12 +969,12 @@ export default function App(){
 
   if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
-  if(pulseChatUser){return(<div style={outerShell}><div style={phoneCard}>
+  if(pulseChatUser){return(<div style={outerShell}><div style={{...phoneCard,position:"relative"}}>
     {spontaneousTarget&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/>}
     <PulseChat currentUser={currentUser} otherUser={pulseChatUser} onStartCircle={openSpontaneousSheet} onConnect={handleConnect} onDismiss={closePulseChat}/>
   </div></div>);}
 
-  if(spontaneousTarget&&!pulseChatUser){return(<div style={outerShell}><div style={phoneCard}>
+  if(spontaneousTarget&&!pulseChatUser){return(<div style={outerShell}><div style={{...phoneCard,position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
     <SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/>
   </div></div>);}
 
@@ -1072,7 +1068,7 @@ export default function App(){
           {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
           {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
           {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-          {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} interestMatch={interestMatchCircle?.id===c.id} userTags={currentUser.tags||[]} onMatchGo={goToInterestMatch}/>)}
+          {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} interestMatch={interestMatchCircle?.id===c.id} userTags={currentUser.tags||[]} onMatchGo={goToInterestMatch} onMatchDismiss={()=>setInterestMatchCircle(null)}/>)}
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={1.5} fill={BG} style={{pointerEvents:"none"}}/>
