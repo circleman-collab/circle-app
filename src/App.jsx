@@ -353,7 +353,7 @@ function PulseChat({currentUser,otherUser,onStartCircle,onConnect,onDismiss}){
       <div style={{flex:1}}><div style={{fontWeight:900,fontSize:14,letterSpacing:1,color:INK}}>{otherUser.displayName}</div>{otherUser.status&&<div style={{fontSize:10,color:INK_MID,fontStyle:"italic"}}>"{otherUser.status}"</div>}</div>
       <div style={{textAlign:"right"}}><div style={{fontSize:16,fontWeight:900,color:faded?INK_LIGHT:remaining<=2?INK:INK_MID}}>{remaining}</div><div style={{fontSize:7,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:INK_LIGHT}}>left</div></div>
     </div>
-    <div ref={msgsRef} style={{flex:1,padding:"16px 18px",overflowY:"auto",display:"flex",flexDirection:"column",gap:10,position:"relative"}}>
+    <div ref={msgsRef} style={{flex:1,padding:"16px 18px",overflowY:"auto",overscrollBehavior:"contain",display:"flex",flexDirection:"column",gap:10,position:"relative"}}>
       {msgs.length===0&&(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
         {otherUser.status&&<div style={{fontSize:12,color:INK_MID,fontStyle:"italic",textAlign:"center",padding:"8px 16px",border:"1px solid "+INK_LIGHT}}>"{otherUser.status}"</div>}
         <div style={{fontSize:11,color:INK_MID,textAlign:"center",lineHeight:1.9,maxWidth:220}}>A temporary channel.<br/>{PULSE_CHAT_LIMIT} messages to figure out what this is.</div>
@@ -368,7 +368,7 @@ function PulseChat({currentUser,otherUser,onStartCircle,onConnect,onDismiss}){
       <button onClick={onConnect} style={{flex:1,background:"none",border:"1.5px solid "+INK_LIGHT,color:INK_MID,padding:"10px 0",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>Connect →</button>
     </div>
     {!locked&&(<div style={{padding:"10px 18px 16px",borderTop:"1.5px solid "+INK,display:"flex",gap:10,alignItems:"center"}}>
-      <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")send();}} placeholder="Say something..." style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:14,color:INK,padding:"6px 0"}}/>
+      <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")send();}} placeholder="Say something..." style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:16,color:INK,padding:"6px 0"}}/>
       <button onClick={send} style={{background:INK,color:BG,border:"none",padding:"10px 14px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1.5,minHeight:44}}>SEND</button>
     </div>)}
   </div>);
@@ -1197,8 +1197,8 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100dvh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font};
-  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:"0",position:"relative"};
+  var outerShell={background:BG_OUTER,position:"fixed",inset:0,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,overflowY:"auto"};
+  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:"0",position:"relative",minHeight:0};
 
   if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
