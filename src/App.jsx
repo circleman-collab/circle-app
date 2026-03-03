@@ -326,7 +326,7 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
   var [open,setOpen]=useState(false);
   var [customInput,setCustomInput]=useState("");
   var [addingCustom,setAddingCustom]=useState(false);
-  var [dropdownStyle,setDropdownStyle]=useState({});
+  var [dropdownStyle,setDropdownStyle]=useState({position:"absolute",top:"100%",left:0,right:0,zIndex:1000});
   var inputRef=useRef(null),triggerRef=useRef(null);
   var presets=currentUser.statusPresets||DEFAULT_PRESETS;
   var currentStatus=currentUser.status||"";
@@ -334,11 +334,9 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
   useEffect(()=>{
     if(addingCustom&&inputRef.current)inputRef.current.focus();
   },[addingCustom]);
-  // Compute fixed position so dropdown isn't clipped by phoneCard overflow:hidden
   useEffect(()=>{
-    if(!open||!triggerRef.current)return;
-    var rect=triggerRef.current.getBoundingClientRect();
-    setDropdownStyle({position:"fixed",top:rect.bottom,left:rect.left,right:window.innerWidth-rect.right,zIndex:1000});
+    if(!open)return;
+    setDropdownStyle({position:"absolute",top:"100%",left:0,right:0,zIndex:1000});
   },[open]);
 
   function selectPreset(p){
