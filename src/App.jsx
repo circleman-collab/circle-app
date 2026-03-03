@@ -33,6 +33,8 @@ const PULSE_CIRCLES=[
   {id:"pc_3",name:"The Back Channel",tags:["music","film","gaming"],passphrase:"signal lost",angle:160,r:90,members:4,governance:{mode:"admin",admins:["user_bc"]},type:"hidden",pulseable:true},
 ];
 
+const _isMobile=window.innerWidth<=430;
+
 function tagSeed(tags){var s=0;(tags||[]).forEach(t=>{for(var i=0;i<t.length;i++)s=(s*31+t.charCodeAt(i))>>>0;});return s;}
 function seededRand(seed,i){var x=Math.sin(seed+i*127.1)*43758.5453123;return x-Math.floor(x);}
 
@@ -865,7 +867,7 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var isMobile=window.innerWidth<=430;
+  var isMobile=_isMobile;
   var outerShell={background:BG_OUTER,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%"};
   var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:isMobile?0:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:isMobile?"none":"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:isMobile?0:"12px",position:"relative"};
 
