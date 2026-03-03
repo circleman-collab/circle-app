@@ -870,20 +870,8 @@ export default function App(){
   var outerShell={background:BG_OUTER,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent"};
   var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:"12px",position:"relative"};
 
-  if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
+  if(!currentUser)return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
-  if(pulseChatUser){
-    return(<div style={outerShell}><div style={phoneCard}>
-      {spontaneousTarget&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/>}
-      <PulseChat currentUser={currentUser} otherUser={pulseChatUser} onStartCircle={openSpontaneousSheet} onConnect={handleConnect} onDismiss={closePulseChat}/>
-    </div></div>);
-  }
-
-  if(spontaneousTarget&&!pulseChatUser){
-    return(<div style={outerShell}><div style={phoneCard}>
-      <SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/>
-    </div></div>);
-  }
 
   var visibleChats=radius?allChats.filter(c=>c.r<=radius&&c.type!=="hidden"):[];
   var radiusMiles=radius?((radius/MAX_R)*2).toFixed(1):"—";
@@ -902,8 +890,7 @@ export default function App(){
     var msgs=liveChat.msgs||[];
     var chatColor=DRAFT_COLORS[selectedChat.id]||INK;
     var isDemo=selectedChat.governance?.mode==="democracy";
-    return(<div style={outerShell}><div style={phoneCard}>
-      <div style={{padding:"16px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",gap:14,minHeight:56}}>
+    return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}>      <div style={{padding:"16px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",gap:14,minHeight:56}}>
         <button onClick={()=>setSelectedChat(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,padding:"0 8px 0 0",minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>←</button>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:11,height:11,borderRadius:"50%",background:chatColor,flexShrink:0}}/>
@@ -922,13 +909,21 @@ export default function App(){
     </div></div>);
   }
 
-  if(creating)return(<div style={outerShell}><div style={phoneCard}><CreateFlow onComplete={handleCreateComplete} onCancel={()=>{setCreating(false);setPendingPos(null);}}/></div></div>);
+  // creating handled inline in main return below
 
-  return(<div style={outerShell}><div style={phoneCard}>
+  return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}>
     {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
     {showPersonCard&&nearbyUser&&<PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson}/>}
     {showCircleCard&&nearbyCircle&&<CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle}/>}
     {interestMatchCircle&&<InterestMatchNotif circle={interestMatchCircle} sharedTags={interestMatchTags} onGo={()=>goToInterestMatch(interestMatchCircle)} onDismiss={()=>setInterestMatchCircle(null)}/>}
+
+    {pulseChatUser&&<>
+      {spontaneousTarget&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/> }
+      <PulseChat currentUser={currentUser} otherUser={pulseChatUser} onStartCircle={openSpontaneousSheet} onConnect={handleConnect} onDismiss={closePulseChat}/>
+    </>}
+    {spontaneousTarget&&!pulseChatUser&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/> }
+    {creating&&<CreateFlow onComplete={handleCreateComplete} onCancel={()=>{setCreating(false);setPendingPos(null);}}/> }
+    {!pulseChatUser&&!spontaneousTarget&&!creating&&<>
 
     <div style={{padding:"14px 18px 11px",borderBottom:"2px solid "+INK,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:52}}>
       <span style={{fontWeight:900,fontSize:20,letterSpacing:4,textTransform:"uppercase",color:INK}}>Circle</span>
@@ -1092,5 +1087,6 @@ export default function App(){
         return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:54,background:bg2,border:"none",borderRight:i<3?"1px solid "+INK_LIGHT:"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{icon}</button>);
       })}
     </div>
+    </>}
   </div></div>);
 }
