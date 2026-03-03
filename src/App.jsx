@@ -683,8 +683,8 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,intere
 function JoinModal({chat,onClose,onJoined,onRequestSent}){
   var [track,setTrack]=useState(null),[input,setInput]=useState(""),[status,setStatus]=useState(null);
   var color=DRAFT_COLORS[chat.id]||INK;
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none",width:"100%"};
-  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%",fontSize:15,padding:"6px 0"};
+  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"14px 0",border:"none",width:"100%",minHeight:48};
+  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%",fontSize:16,padding:"6px 0"};
   function tryPassphrase(){if(!input.trim())return;if(input.trim().toLowerCase()===(chat.passphrase||"").toLowerCase()){setStatus("success");setTimeout(()=>onJoined(chat),900);}else{setStatus("error");setTimeout(()=>setStatus(null),1400);}}
   function submitRequest(){if(!input.trim())return;onRequestSent(chat.id,{id:Math.random().toString(36).slice(2),senderId:"user_local",senderHandle:"@you",message:input.trim(),timestamp:Date.now(),status:"pending"});setStatus("pending");}
   function tryInvite(){if(input.trim().length===6){setStatus("success");setTimeout(()=>onJoined(chat),900);}else{setStatus("error");setTimeout(()=>setStatus(null),1400);}}
@@ -723,8 +723,8 @@ function FloatingTag({tag,confirming,onRemove,isCustom=false}){
 function OnboardingFlow({onComplete}){
   var [step,setStep]=useState(1),[name,setName]=useState(""),[handle,setHandle]=useState(""),[tags,setTags]=useState([]),[customTags,setCustomTags]=useState(new Set()),[tagInput,setTagInput]=useState(""),[status,setStatus]=useState(""),[pulseCheck,setPulseCheck]=useState(false),[avatarBurst,setAvatarBurst]=useState(false),[avatarGrand,setAvatarGrand]=useState(false),[avatarCustomBurst,setAvatarCustomBurst]=useState(false);
   var inputRef=useRef(null);
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none",width:"100%"};
-  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%"};
+  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"14px 0",border:"none",width:"100%",minHeight:48,WebkitTapHighlightColor:"transparent"};
+  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%",fontSize:16};
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[step]);
 
   function addTag(t,fromSuggestion=false){
@@ -769,7 +769,7 @@ function OnboardingFlow({onComplete}){
           {customTags.has(t)&&<RoughUnderline width={t.length*6.5} color={BG}/>}
         </div>))}
       </div>
-      {tags.length<9&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={step===2?inputRef:null} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput,false);}}} placeholder="or type your own..." maxLength={24} style={{...ii,fontSize:13,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput,false)} style={{background:tagInput.trim()?INK:"none",color:tagInput.trim()?BG:INK_LIGHT,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}
+      {tags.length<9&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={step===2?inputRef:null} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput,false);}}} placeholder="or type your own..." maxLength={24} style={{...ii,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput,false)} style={{background:tagInput.trim()?INK:"none",color:tagInput.trim()?BG:INK_LIGHT,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}
       <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:10}}>Suggestions</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
           {ALL_INTEREST_TAGS.filter(s=>!tags.includes(s)).map(s=>(<div key={s} onClick={()=>{if(tags.length<9)addTag(s,true);}} style={{border:"1.5px solid "+INK_LIGHT,padding:"5px 10px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:tags.length<9?"pointer":"default",color:tags.length<9?INK_MID:INK_LIGHT}}>{s}</div>))}
@@ -805,8 +805,8 @@ function CreateFlow({onComplete,onCancel}){
   var canNext1=name.trim().length>=2,canNext2=ctype!==null,canNext3=tags.length>=3,canCreate=canNext3;
   var totalSteps=ctype==="hidden"?5:4;
   var typeOptions=[{key:"open",label:"Open",desc:"Anyone nearby can join"},{key:"closed",label:"Closed",desc:"Invite only"},{key:"hidden",label:"Hidden",desc:"Discovered via Pulse"}];
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none"};
-  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%"};
+  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"14px 0",border:"none",minHeight:48,WebkitTapHighlightColor:"transparent"};
+  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%",fontSize:16};;
   return(<div style={{flex:1,display:"flex",flexDirection:"column"}}>
     <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:52}}><button onClick={onCancel} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",padding:0}}>←</button><span style={{fontWeight:900,fontSize:11,letterSpacing:2,textTransform:"uppercase",color:INK}}>New Circle</span><span style={{fontSize:10,fontWeight:700,color:INK_MID,letterSpacing:1,minWidth:44,textAlign:"right"}}>{step} / {totalSteps}</span></div>
     {step===1&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:32}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Name your circle</div><input ref={inputRef} value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}} placeholder="WHAT IS IT CALLED" maxLength={32} style={{...ii,fontSize:22,fontWeight:900,letterSpacing:1,padding:"8px 0",textTransform:"uppercase"}}/><button onClick={()=>{if(canNext1)setStep(2);}} style={{...bb,background:canNext1?INK:"none",color:canNext1?BG:INK_LIGHT,border:"2px solid "+(canNext1?INK:INK_LIGHT)}}>Continue →</button></div>)}
@@ -1110,22 +1110,23 @@ export default function App(){
   },[lensSet,lensRadius,panX,panY,startPlantHold]);
 
   const onLensMove=useCallback((e)=>{
-    e.preventDefault();
     var c=e.touches?e.touches[0]:e;
     if(lensDrawing){
+      e.preventDefault();
       var pos=toSVG(c.clientX,c.clientY);
       var dist=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
       setLensRadius(Math.max(MIN_LENS,Math.min(MAX_LENS,dist)));
       return;
     }
     if(dragging.current&&svgRef.current){
-      // resize lens
+      e.preventDefault();
       var pos2=toSVG(c.clientX,c.clientY);
       var dist2=Math.sqrt((pos2.x-CX)**2+(pos2.y-CY)**2);
       setLensRadius(Math.max(MIN_LENS,Math.min(MAX_LENS,dist2)));
       return;
     }
     if(isPanning.current&&panOrigin.current&&svgRef.current){
+      e.preventDefault();
       var rect=svgRef.current.getBoundingClientRect();
       var scale=350/rect.width;
       setPanX(panOrigin.current.px+(c.clientX-panOrigin.current.x)*scale);
@@ -1151,16 +1152,28 @@ export default function App(){
 
   function resetLens(){setLensRadius(null);setLensSet(false);setLensScale(1);setLensDrawing(false);setPanX(0);setPanY(0);}
 
+  var isInteractingWithMap=useRef(false);
+
   useEffect(()=>{
+    function handleTouchMove(e){
+      // Only intercept touch events that started on the map SVG
+      if(!isInteractingWithMap.current)return;
+      onLensMove(e);
+    }
+    function handleTouchEnd(e){
+      if(!isInteractingWithMap.current)return;
+      isInteractingWithMap.current=false;
+      onLensUp(e);
+    }
     window.addEventListener("mousemove",onLensMove);
     window.addEventListener("mouseup",onLensUp);
-    window.addEventListener("touchmove",onLensMove,{passive:false});
-    window.addEventListener("touchend",onLensUp);
+    window.addEventListener("touchmove",handleTouchMove,{passive:false});
+    window.addEventListener("touchend",handleTouchEnd);
     return()=>{
       window.removeEventListener("mousemove",onLensMove);
       window.removeEventListener("mouseup",onLensUp);
-      window.removeEventListener("touchmove",onLensMove);
-      window.removeEventListener("touchend",onLensUp);
+      window.removeEventListener("touchmove",handleTouchMove);
+      window.removeEventListener("touchend",handleTouchEnd);
     };
   },[onLensMove,onLensUp]);
 
@@ -1184,8 +1197,8 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none"};
-  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:"12px",position:"relative"};
+  var outerShell={background:BG_OUTER,minHeight:"100dvh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font};
+  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:"0",position:"relative"};
 
   if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
@@ -1262,8 +1275,9 @@ export default function App(){
       {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold inside your lens to plant a circle</div>}
       {!lensRadius&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Drag to set your lens radius</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
-        <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
-          onMouseDown={onLensDown} onTouchStart={onLensDown}>
+        <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none",userSelect:"none",WebkitUserSelect:"none"}}
+          onMouseDown={(e)=>{isInteractingWithMap.current=true;onLensDown(e);}}
+          onTouchStart={(e)=>{isInteractingWithMap.current=true;onLensDown(e);}}>
 
           {/* City map layer — scrolls with pan */}
           <CityMapLayer panX={panX} panY={panY}/>
