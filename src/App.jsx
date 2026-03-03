@@ -6,9 +6,7 @@ const DRAFT_COLORS={1:"#7a6a3a",2:"#3a5a4a",3:"#4a3a6a",4:"#7a3a3a",5:"#3a5a6a",
 const HOLD_MS=1500, PLANT_MS=1200;
 
 // ── Semantic Avatar Axes ──────────────────────────────────────────────────────
-// [spikiness, roughness, fullness, regularity] each 0–1
 const TAG_AXES = {
-  // Hobbies / Activities
   "coffee":        [0.1, 0.1, 0.9, 0.5],
   "food":          [0.1, 0.1, 0.9, 0.2],
   "gaming":        [0.5, 0.1, 0.2, 0.9],
@@ -37,7 +35,6 @@ const TAG_AXES = {
   "astrology":     [0.1, 0.1, 0.5, 0.9],
   "tattoos":       [0.9, 0.9, 0.2, 0.1],
   "dogs":          [0.1, 0.1, 0.9, 0.1],
-  // Vibes / Personality
   "night owl":     [0.1, 0.5, 0.2, 0.1],
   "introvert":     [0.1, 0.1, 0.5, 0.9],
   "slow mornings": [0.1, 0.1, 0.9, 0.5],
@@ -48,7 +45,6 @@ const TAG_AXES = {
   "empath":        [0.1, 0.1, 0.9, 0.1],
   "restless":      [0.9, 0.5, 0.2, 0.1],
   "daydreamer":    [0.1, 0.5, 0.5, 0.1],
-  // Scene / Culture
   "punk":          [0.9, 0.9, 0.2, 0.1],
   "indie":         [0.1, 0.5, 0.2, 0.1],
   "hip-hop":       [0.7, 0.4, 0.5, 0.3],
@@ -121,16 +117,12 @@ function genAvatarPath(tags, size) {
   return d + "Z";
 }
 
-// All tags as individual items
 const ALL_INTEREST_TAGS = [
-  // Hobbies / Activities
   "coffee","food","gaming","tech","art","design","film","books","jazz","vinyl",
   "hiking","outdoors","fitness","cycling","rock","metal","climbing","skateboarding",
   "photography","cooking","theatre","poetry","travel","dancing","ceramics","astrology","tattoos","dogs",
-  // Vibes / Personality
   "night owl","introvert","slow mornings","overthinker","homebody","chaotic good",
   "early bird","empath","restless","daydreamer",
-  // Scene / Culture
   "punk","indie","hip-hop","r&b","country","religious","activist","academic",
   "nightlife","sports","foodie","maker","spiritual","theater kid","military",
   "immigrant","parent","creative","hustler","performer",
@@ -227,7 +219,7 @@ function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,custom
   var ringCount=isCustom?[0,0.1,0.2,0.32]:[0,0.15,0.3];
   return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{overflow:"visible"}}>
     {((grand&&burst)||isCustom)&&burst&&burstProg>0&&ringCount.map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.7));if(rp<=0)return null;var maxE=isCustom?0.75:0.55;return <circle key={i} cx={cx} cy={cy} r={size*(0.36+rp*maxE)} fill="none" stroke={color} strokeWidth={(1-rp)*size*(isCustom?0.03:0.022)} opacity={(1-rp)*(isCustom?0.65:0.5)} style={{pointerEvents:"none"}}/>;  })}
-    {particles&&particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,0.5),lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=cx+Math.cos(p.angle)*p.dist*e+Math.cos(pa)*lat,py=cy+Math.sin(p.angle)*p.dist*e+Math.sin(pa)*lat;return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,isCustom?0.6:0.9)*(isCustom?0.98:0.85)} style={{pointerEvents:"none"}}/>;  })}
+    {particles&&particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,0.5),lat=p.drift*Math.sin(e*Math.PI*p.driftFreq);var pa=p.angle+Math.PI/2;var px=cx+Math.cos(p.angle)*p.dist*e+Math.cos(pa)*lat,py=cy+Math.sin(p.angle)*p.dist*e+Math.sin(pa)*lat;return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,isCustom?0.6:0.9)*(isCustom?0.98:0.85)} style={{pointerEvents:"none"}}/>;  })}
     <g transform={`translate(${cx},${cy}) scale(${breathe*expand}) translate(${-cx},${-cy})`}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></g>
   </svg>);
 }
@@ -419,19 +411,6 @@ function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
   </div>);
 }
 
-function InterestMatchNotif({circle,sharedTags,onGo,onDismiss}){
-  var [visible,setVisible]=useState(false);
-  useEffect(()=>{var t=setTimeout(()=>setVisible(true),60);return()=>clearTimeout(t);},[]);
-  return(<div style={{position:"absolute",top:0,left:0,right:0,zIndex:120,transform:visible?"translateY(0)":"translateY(-100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,borderBottom:"2px solid "+INK,padding:"10px 18px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 3px 0 "+INK_LIGHT}}>
-      <div style={{fontSize:12,color:INK_MID,flexShrink:0}}>◉</div>
-      <div style={{flex:1,minWidth:0}}><div style={{fontSize:10,fontWeight:700,color:INK,letterSpacing:.3}}>{circle.name}</div><div style={{fontSize:9,color:INK_MID,marginTop:1,display:"flex",gap:4,flexWrap:"wrap"}}>{sharedTags.slice(0,3).map(t=><span key={t} style={{background:INK,color:BG,padding:"1px 5px",fontSize:7.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{t}</span>)}<span style={{color:INK_MID}}>nearby</span></div></div>
-      <button onClick={onGo} style={{background:"none",border:"1px solid "+INK,color:INK,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"5px 10px",flexShrink:0,minHeight:36}}>Show →</button>
-      <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:INK_MID,minWidth:36,minHeight:36,display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>×</button>
-    </div>
-  </div>);
-}
-
 function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
   var [open,setOpen]=useState(false),[customInput,setCustomInput]=useState(""),[addingCustom,setAddingCustom]=useState(false);
   var inputRef=useRef(null);
@@ -442,25 +421,26 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
   function addCustom(){var v=customInput.trim();if(!v)return;onUpdatePresets([...presets,v]);onUpdateStatus(v);setCustomInput("");setAddingCustom(false);setOpen(false);}
   function removePreset(p,e){e.stopPropagation();var next=presets.filter(x=>x!==p);onUpdatePresets(next);if(currentStatus===p)onUpdateStatus("");}
   var hasStatus=!!currentStatus;
+  // Taller row (40px), larger status text (13px)
   return(<div style={{position:"relative",zIndex:60}}>
-    <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",height:32,background:open?INK:BG,borderBottom:"1.5px solid "+(open?INK:INK_LIGHT),cursor:"pointer",transition:"background 0.15s",position:"relative"}}>
-      <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,pointerEvents:"none",overflow:"hidden"}}><svg width="100%" height="32" style={{position:"absolute",top:0,left:0}}><rect x="0" y="0" width="100%" height="32" fill={open?INK:BG}/><path d="M 0 2 Q 8 0 16 0 L 100% 0 L 100% 32 L 0 32 Z" fill={open?INK:BG}/></svg></div>
-      <div style={{display:"flex",alignItems:"center",gap:8,position:"relative",zIndex:1,minWidth:0}}>
+    <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 18px",height:40,background:open?INK:BG,borderBottom:"1.5px solid "+(open?INK:INK_LIGHT),cursor:"pointer",transition:"background 0.15s",position:"relative"}}>
+      <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,pointerEvents:"none",overflow:"hidden"}}><svg width="100%" height="40" style={{position:"absolute",top:0,left:0}}><rect x="0" y="0" width="100%" height="40" fill={open?INK:BG}/></svg></div>
+      <div style={{display:"flex",alignItems:"center",gap:10,position:"relative",zIndex:1,minWidth:0}}>
         <span style={{fontSize:8,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:open?BG:INK_MID,flexShrink:0}}>STATUS</span>
-        <span style={{fontSize:11,fontStyle:"italic",color:open?BG:(hasStatus?INK:INK_LIGHT),fontWeight:hasStatus?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180}}>{hasStatus?`"${currentStatus}"`:`"set a status"`}</span>
+        <span style={{fontSize:13,fontStyle:"italic",color:open?BG:(hasStatus?INK:INK_LIGHT),fontWeight:hasStatus?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{hasStatus?`"${currentStatus}"`:`"set a status"`}</span>
       </div>
       <div style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:6}}>
-        {hasStatus&&!open&&<span onClick={e=>{e.stopPropagation();clearStatus();}} style={{fontSize:12,color:INK_LIGHT,cursor:"pointer",lineHeight:1}}>×</span>}
+        {hasStatus&&!open&&<span onClick={e=>{e.stopPropagation();clearStatus();}} style={{fontSize:14,color:INK_LIGHT,cursor:"pointer",lineHeight:1,padding:"4px"}}>×</span>}
         <span style={{fontSize:9,color:open?BG:INK_MID,transition:"transform 0.2s",display:"inline-block",transform:open?"rotate(180deg)":"rotate(0deg)"}}>▾</span>
       </div>
     </div>
     {open&&(<div style={{position:"absolute",top:"100%",left:0,right:0,background:BG,border:"1.5px solid "+INK,borderTop:"none",boxShadow:"0 4px 0 "+INK_LIGHT,zIndex:100,maxHeight:280,overflowY:"auto"}}>
       {hasStatus&&<div style={{padding:"8px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Active</span><button onClick={clearStatus} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"3px 8px"}}>Clear</button></div>}
       {presets.map((p,i)=>{var isActive=p===currentStatus;return(<div key={i} onClick={()=>selectPreset(p)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",borderBottom:"1px solid "+INK_LIGHT,cursor:"pointer",background:isActive?INK:BG,gap:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>{isActive&&<span style={{fontSize:8,color:BG,flexShrink:0}}>◉</span>}<span style={{fontSize:12,fontStyle:"italic",color:isActive?BG:INK,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{p}"</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>{isActive&&<span style={{fontSize:8,color:BG,flexShrink:0}}>◉</span>}<span style={{fontSize:13,fontStyle:"italic",color:isActive?BG:INK,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{p}"</span></div>
         {!isActive&&<span onClick={e=>removePreset(p,e)} style={{fontSize:11,color:INK_LIGHT,cursor:"pointer",flexShrink:0,padding:"0 2px"}}>×</span>}
       </div>);})}
-      {addingCustom?(<div style={{padding:"10px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:8,alignItems:"center"}}><input ref={inputRef} value={customInput} onChange={e=>setCustomInput(e.target.value.slice(0,50))} onKeyDown={e=>{if(e.key==="Enter")addCustom();if(e.key==="Escape"){setAddingCustom(false);setCustomInput("");}}} placeholder="write your own..." style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:12,fontStyle:"italic",color:INK,padding:"4px 0"}}/><button onClick={addCustom} style={{background:INK,color:BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1,minHeight:32}}>Add</button></div>)
+      {addingCustom?(<div style={{padding:"10px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:8,alignItems:"center"}}><input ref={inputRef} value={customInput} onChange={e=>setCustomInput(e.target.value.slice(0,50))} onKeyDown={e=>{if(e.key==="Enter")addCustom();if(e.key==="Escape"){setAddingCustom(false);setCustomInput("");}}} placeholder="write your own..." style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:13,fontStyle:"italic",color:INK,padding:"4px 0"}}/><button onClick={addCustom} style={{background:INK,color:BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1,minHeight:32}}>Add</button></div>)
       :(<div onClick={()=>setAddingCustom(true)} style={{padding:"11px 16px",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}><span style={{fontSize:12,color:INK_LIGHT,lineHeight:1}}>+</span><span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK_MID}}>Add custom</span></div>)}
     </div>)}
   </div>);
@@ -487,7 +467,63 @@ function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*
 
 function FistIcon({size=12,color=INK}){var lo=color===BG||color==="white"?"rgba(0,0,0,0.15)":"rgba(255,255,255,0.2)";return(<svg width={size} height={size} viewBox="0 0 24 28" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}><path d="M 5 14 L 5 9 Q 5 7 7 7 L 10 7 Q 10 5 12 5 L 13 5 Q 15 5 15 7 L 17 7 Q 19 7 19 9 L 19 11 Q 19 13 17 13 L 17 14 Q 17 16 15 16 L 7 16 Q 5 16 5 14 Z" fill={color}/><path d="M 5 13 Q 3 12 2 10 Q 1 8 3 8 Q 5 8 6 10 L 6 13 Z" fill={color}/><path d="M 5 16 Q 5 20 6 22 L 18 22 Q 19 20 19 16 Q 17 16 15 16 L 7 16 Q 5 16 5 16 Z" fill={color}/><line x1="8" y1="7.5" x2="8" y2="10" stroke={lo} strokeWidth="0.8"/><line x1="12" y1="5.5" x2="12" y2="9" stroke={lo} strokeWidth="0.8"/><line x1="16" y1="7.5" x2="16" y2="10" stroke={lo} strokeWidth="0.8"/></svg>);}
 
-function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted}){
+// ── Interest Match Pip — rendered directly on the map SVG ─────────────────────
+// Returns SVG elements; must be used inside the map <svg>
+function InterestMatchPip({circle, cx, cy, userTags, onDismiss, onGo}) {
+  var [pipPulse, setPipPulse] = useState(0);
+  var rafRef = useRef(null);
+  var sharedTags = userTags.filter(t => (circle.tags||[]).includes(t));
+  var color = DRAFT_COLORS[circle.id] || INK;
+  var x = cx + circle.r * Math.cos((circle.angle * Math.PI) / 180);
+  var y = cy + circle.r * Math.sin((circle.angle * Math.PI) / 180);
+
+  useEffect(() => {
+    var start = performance.now();
+    function loop() {
+      var t = (performance.now() - start) / 1000;
+      setPipPulse(0.5 + 0.5 * Math.sin(t * 2.8));
+      rafRef.current = requestAnimationFrame(loop);
+    }
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  // Pip sits at top-right of the marker
+  var px = x + 8, py = y - 8;
+
+  return (
+    <g style={{pointerEvents:"auto",cursor:"pointer"}} onClick={() => onGo(circle)}>
+      {/* Pulsing halo */}
+      <circle cx={px} cy={py} r={6 + pipPulse * 4} fill="none" stroke={color}
+        strokeWidth="0.8" opacity={0.3 * (1 - pipPulse)} style={{pointerEvents:"none"}}/>
+      {/* Pip dot */}
+      <circle cx={px} cy={py} r={4.5} fill={color} opacity={0.9}/>
+      {/* Shared tag count */}
+      <text x={px} y={py + 1.5} textAnchor="middle" dominantBaseline="middle"
+        fontSize="5" fontWeight="900" fill={BG} fontFamily={font}
+        style={{pointerEvents:"none"}}>{sharedTags.length}</text>
+    </g>
+  );
+}
+
+// ── Radius edge label ─────────────────────────────────────────────────────────
+// Renders the "X mi · Y visible" label anchored to the bottom of the wobble ring
+function RadiusEdgeLabel({cx, cy, radius, radiusMiles, visibleCount}) {
+  if (!radius) return null;
+  // Bottom of ring = cy + radius (approx, wobble adds ~2px so add a small offset)
+  var lx = cx;
+  var ly = cy + radius + 14;
+  return (
+    <g style={{pointerEvents:"none"}}>
+      <text x={lx} y={ly} textAnchor="middle" fontSize="8.5" fontWeight="700"
+        fill={INK_MID} fontFamily={font} letterSpacing="0.8">
+        {radiusMiles} mi · {visibleCount} visible
+      </text>
+    </g>
+  );
+}
+
+function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,interestMatch,userTags,onMatchGo}){
   var R=10,color=DRAFT_COLORS[chat.id]||INK;
   var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
   var inRange=radius===null||chat.r<=radius,baseOp=inRange?1:0.2;
@@ -495,7 +531,14 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted}){
     if(!revealProgress||revealProgress<=0)return null;
     var rp=revealProgress,sh=0.4+0.6*Math.sin(rp*Math.PI),hatch=[];
     for(var i=-R;i<=R;i+=3.5){var hw=Math.sqrt(Math.max(0,R*R-i*i));hatch.push(<line key={i} x1={x-hw} y1={y+i} x2={x+hw} y2={y+i} stroke={color} strokeWidth="0.7" opacity={0.45*rp}/>);}
-    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp*baseOp}}><circle cx={x} cy={y} r={22} fill="transparent"/><circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/><clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath><g clipPath={"url(#hclip"+chat.id+")"}>{hatch}</g><circle cx={x} cy={y} r={R} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={chat.pulseable!==false?"3 2.5":"none"}/><text x={x} y={y+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font}>?</text></g>);
+    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp*baseOp}}>
+      <circle cx={x} cy={y} r={22} fill="transparent"/>
+      <circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/>
+      <clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath>
+      <g clipPath={"url(#hclip"+chat.id+")"}>{hatch}</g>
+      <circle cx={x} cy={y} r={R} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={chat.pulseable!==false?"3 2.5":"none"}/>
+      <text x={x} y={y+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font}>?</text>
+    </g>);
   }
   return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition:"opacity 0.25s"}}>
     <circle cx={x} cy={y} r={22} fill="transparent"/>
@@ -504,6 +547,8 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted}){
     {chat.type==="open"&&<circle cx={x} cy={y} r={R} fill={color}/>}
     {chat.type==="closed"&&<circle cx={x} cy={y} r={R} fill={BG} stroke={color} strokeWidth="2"/>}
     <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inRange?1:0.3}>{chat.name.toUpperCase()}</text>
+    {/* Interest match pip rendered here, inside the marker group */}
+    {interestMatch&&<InterestMatchPip circle={chat} cx={cx} cy={cy} userTags={userTags||[]} onDismiss={()=>{}} onGo={onMatchGo}/>}
   </g>);
 }
 
@@ -526,7 +571,7 @@ function JoinModal({chat,onClose,onJoined,onRequestSent}){
   </div></div>);
 }
 
-function PulseParticles({progress,tx,ty,fired,particles}){if(!particles||progress<=0)return null;var BTN_R=64;return <g>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=fired?Math.pow(lp,.55):1-Math.pow(1-lp,.7);var dist=fired?e*BTN_R*4.2:p.dist*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=tx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,py=ty+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var op=fired?Math.pow(1-e,.8)*.8:(.2+e*.8);var sz=fired?p.size*(1-e*.6):p.size*(.3+e*.7);return <circle key={i} cx={px} cy={py} r={Math.max(.1,sz)} fill={INK} opacity={op} style={{pointerEvents:"none"}}/>;})}</g>;}
+function PulseParticles({progress,tx,ty,fired,particles}){if(!particles||progress<=0)return null;var BTN_R=64;return <g>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=fired?Math.pow(lp,.55):1-Math.pow(1-lp,.7);var dist=fired?e*BTN_R*4.2:p.dist*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=BTN_R+Math.cos(p.angle)*dist+Math.cos(pa)*lat,py=BTN_R+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var op=fired?Math.pow(1-e,.8)*.8:(.2+e*.8);var sz=fired?p.size*(1-e*.6):p.size*(.3+e*.7);return <circle key={i} cx={px} cy={py} r={Math.max(.1,sz)} fill={INK} opacity={op} style={{pointerEvents:"none"}}/>;})}</g>;}
 function OutwardBurst({progress,cx,cy,radius,particles}){if(!particles||!progress||progress<=0||!radius)return null;return <g style={{pointerEvents:"none"}}>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,.5),maxD=radius*p.travelMult,dist=e*maxD;var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var x=cx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,y=cy+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var fade=dist>radius?Math.max(0,1-(dist-radius)/(maxD-radius)):1;return <circle key={i} cx={x} cy={y} r={Math.max(.1,p.size*(1-e*.55))} fill={INK} opacity={Math.pow(1-e,.6)*p.brightness*fade}/>;})}</g>;}
 function InwardRush({progress,cx,cy,radius,particles}){if(!particles||!progress||progress<=0||!radius)return null;return <g style={{pointerEvents:"none"}}>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=1-Math.pow(1-lp,.7),spawnD=radius*p.spawnMult,dist=spawnD*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var x=cx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,y=cy+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var fadeIn=Math.min(1,e*3),fadeOut=dist<20?dist/20:1;return <circle key={i} cx={x} cy={y} r={Math.max(.1,p.size*(.4+e*.6))} fill={INK} opacity={fadeIn*fadeOut*p.brightness*.75}/>;})}</g>;}
 function PlantParticles({progress,px,py,stamp,particles}){if(!particles||progress<=0||!px)return null;return <g>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=stamp?Math.pow(lp,.5):1-Math.pow(1-lp,.75);var dist=stamp?e*20:p.scatter*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var x=px+Math.cos(p.angle)*dist+Math.cos(pa)*lat,y=py+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var op=stamp?Math.pow(1-e,.7)*.85:(.15+e*.85);return <circle key={i} cx={x} cy={y} r={Math.max(.1,p.size*(stamp?1-e*.8:.3+e*.7))} fill={INK} opacity={op} style={{pointerEvents:"none"}}/>;})}</g>;}
@@ -643,6 +688,78 @@ function CreateFlow({onComplete,onCancel}){
     {step===5&&ctype==="hidden"&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:28}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Set the passphrase</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Optional. A secret phrase to enter.</div></div><input ref={inputRef} value={passphrase} onChange={e=>setPassphrase(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")handleCreate();}} placeholder="velvet fog..." maxLength={48} style={{...ii,fontSize:18,fontWeight:700,fontStyle:"italic",padding:"8px 0"}}/><div style={{display:"flex",gap:10}}><button onClick={()=>setStep(4)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={handleCreate} style={{...bb,flex:2,background:INK,color:BG}}>Plant Circle</button></div></div>)}
     {step===99&&handleCreate()}
   </div>);
+}
+
+// ── Bottom Nav ────────────────────────────────────────────────────────────────
+// Active tab: icon replaced by animated label. Inactive tabs: icon only.
+function BottomNav({tab, setTab, currentUser}) {
+  var tabs = ["map","circles","pulse","profile"];
+  var [animatingTab, setAnimatingTab] = useState(tab);
+  var [labelOpacity, setLabelOpacity] = useState(1);
+  var rafRef = useRef(null);
+
+  useEffect(() => {
+    // Fade out, swap, fade in
+    setLabelOpacity(0);
+    var timer = setTimeout(() => {
+      setAnimatingTab(tab);
+      var start = performance.now();
+      function fadeIn() {
+        var p = Math.min(1, (performance.now() - start) / 180);
+        setLabelOpacity(p);
+        if (p < 1) rafRef.current = requestAnimationFrame(fadeIn);
+      }
+      rafRef.current = requestAnimationFrame(fadeIn);
+    }, 90);
+    return () => { clearTimeout(timer); cancelAnimationFrame(rafRef.current); };
+  }, [tab]);
+
+  function getIcon(name, active) {
+    var color = active ? BG : INK_MID;
+    if (name === "map") return (
+      <svg width={20} height={20} viewBox="0 0 20 20">
+        <circle cx={10} cy={10} r={8} fill={active ? BG : INK}/>
+        <circle cx={10} cy={10} r={3} fill={active ? INK : BG}/>
+      </svg>
+    );
+    if (name === "circles") return <span style={{fontSize:18,color,lineHeight:1}}>◈</span>;
+    if (name === "pulse") return <span style={{fontSize:18,color,lineHeight:1}}>◉</span>;
+    if (name === "profile") return <StaticAvatar tags={currentUser?.tags||[]} size={26} color={color} bg={active?INK:BG}/>;
+    return null;
+  }
+
+  return (
+    <div style={{borderTop:"2px solid "+INK,display:"flex",background:BG}}>
+      {tabs.map((name, i) => {
+        var active = tab === name;
+        return (
+          <button key={name} onClick={() => setTab(name)} style={{
+            flex:1, minHeight:62, background:active?INK:BG,
+            border:"none",
+            borderRight: i < 3 ? "1px solid " + (active ? INK : INK_LIGHT) : "none",
+            fontFamily:font, cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            transition:"background 0.18s",
+            position:"relative", overflow:"hidden",
+          }}>
+            {active ? (
+              <span style={{
+                fontSize:9, fontWeight:900, letterSpacing:2.5,
+                textTransform:"uppercase", color:BG,
+                opacity:animatingTab===name?labelOpacity:0,
+                transition:"opacity 0.09s",
+                userSelect:"none",
+              }}>
+                {name}
+              </span>
+            ) : (
+              getIcon(name, false)
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function App(){
@@ -795,7 +912,12 @@ export default function App(){
     setSpontaneousTarget(null);setSelectedChat(nc);
   }
   function openCircleJoin(circle){setShowCircleCard(false);setJoinTarget(circle);}
-  function goToInterestMatch(circle){setInterestMatchCircle(null);setHighlightedCircleId(circle.id);setTab("map");setTimeout(()=>setHighlightedCircleId(null),4000);}
+  function goToInterestMatch(circle){
+    setInterestMatchCircle(null);
+    setHighlightedCircleId(circle.id);
+    setTab("map");
+    setTimeout(()=>setHighlightedCircleId(null),4000);
+  }
   function updateStatus(s){setCurrentUser(u=>({...u,status:s}));}
   function updatePresets(p){setCurrentUser(u=>({...u,statusPresets:p}));}
 
@@ -892,12 +1014,22 @@ export default function App(){
 
   if(creating)return(<div style={outerShell}><div style={phoneCard}><CreateFlow onComplete={handleCreateComplete} onCancel={()=>{setCreating(false);setPendingPos(null);}}/></div></div>);
 
+  // ── Reset (Redraw) icon button — SVG circular arrow ────────────────────────
+  function ResetIcon() {
+    return (
+      <svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+        <path d="M 14.5 9 A 5.5 5.5 0 1 1 11 3.9" stroke={INK} strokeWidth="1.8" strokeLinecap="round"/>
+        <polyline points="10.5,2.5 11.5,4.2 9.5,4.8" stroke={INK} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      </svg>
+    );
+  }
+
   return(<div style={outerShell}><div style={phoneCard}>
     {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
     {showPersonCard&&nearbyUser&&<PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson}/>}
     {showCircleCard&&nearbyCircle&&<CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle}/>}
-    {interestMatchCircle&&<InterestMatchNotif circle={interestMatchCircle} sharedTags={interestMatchTags} onGo={()=>goToInterestMatch(interestMatchCircle)} onDismiss={()=>setInterestMatchCircle(null)}/>}
 
+    {/* Header — no tab row, just wordmark + location + bump indicator */}
     <div style={{padding:"14px 18px 11px",borderBottom:"2px solid "+INK,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:52}}>
       <span style={{fontWeight:900,fontSize:20,letterSpacing:4,textTransform:"uppercase",color:INK}}>Circle</span>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -910,19 +1042,9 @@ export default function App(){
       </div>
     </div>
 
-    <div style={{display:"flex",borderBottom:"2px solid "+INK}}>
-      {["map","circles","pulse","profile"].map((t,i)=><button key={t} onClick={()=>setTab(t)} style={{flex:1,minHeight:44,background:tab===t?INK:"none",color:tab===t?BG:INK,border:"none",borderRight:i<3?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>{t}</button>)}
-    </div>
-
     {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
+      {/* Status tab — taller row, larger text */}
       <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
-      <div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:36}}>
-        <span style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Radius</span>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:10,fontWeight:900,color:INK}}>{hasRadius?(radiusMiles+" mi · "+visibleChats.length+" visible"):""}</span>
-          {hasRadius&&<button onClick={resetRadius} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"3px 8px"}}>Redraw</button>}
-        </div>
-      </div>
       {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
         <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
@@ -940,6 +1062,8 @@ export default function App(){
             {isFired&&<PulseRipples cx={CX} cy={CY} maxR={radius} progress={rippleProgress}/>}
             {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
             {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
+            {/* Inline radius label — anchored to bottom of ring */}
+            <RadiusEdgeLabel cx={CX} cy={CY} radius={radius} radiusMiles={radiusMiles} visibleCount={visibleChats.length}/>
           </g>)}
           {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
           {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
@@ -948,12 +1072,27 @@ export default function App(){
           {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
           {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
           {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-          {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id}/>)}
+          {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} interestMatch={interestMatchCircle?.id===c.id} userTags={currentUser.tags||[]} onMatchGo={goToInterestMatch}/>)}
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={1.5} fill={BG} style={{pointerEvents:"none"}}/>
           <text x={CX+8} y={CY+13} fontSize="8" fill={INK_MID} fontFamily={font} letterSpacing="1" fontWeight="600" style={{pointerEvents:"none"}}>{currentUser.handle.toUpperCase()}</text>
         </svg>
+
+        {/* Floating reset button — bottom-right, only when radius is drawn */}
+        {hasRadius&&(
+          <button onClick={resetRadius} title="Reset radius" style={{
+            position:"absolute", bottom:14, right:14,
+            width:36, height:36,
+            background:BG, border:"1.5px solid "+INK,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            cursor:"pointer", zIndex:40,
+            boxShadow:"1px 1px 0 "+INK_LIGHT,
+          }}>
+            <ResetIcon/>
+          </button>
+        )}
+
         {mapDimProgress>0&&<div style={{position:"absolute",inset:0,background:INK,opacity:mapDimProgress,pointerEvents:"none",transition:"opacity 0.08s"}}/>}
       </div>
     </div>)}
@@ -1042,16 +1181,7 @@ export default function App(){
       </div>
     </div>)}
 
-    <div style={{borderTop:"2px solid "+INK,display:"flex"}}>
-      {["map","circles","pulse","profile"].map((name,i)=>{
-        var active=tab===name,bg2=active?INK:BG,fg=active?BG:INK;
-        var icon;
-        if(name==="map")icon=<svg width={18} height={18} viewBox="0 0 18 18"><circle cx={9} cy={9} r={8} fill={active?BG:INK}/><circle cx={9} cy={9} r={3} fill={active?INK:BG}/></svg>;
-        else if(name==="circles")icon=<span style={{fontSize:18,color:fg,lineHeight:1}}>◈</span>;
-        else if(name==="pulse")icon=<span style={{fontSize:18,color:fg,lineHeight:1}}>◉</span>;
-        else icon=<StaticAvatar tags={currentUser.tags} size={28} color={fg} bg={bg2}/>;
-        return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:54,background:bg2,border:"none",borderRight:i<3?"1px solid "+INK_LIGHT:"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{icon}</button>);
-      })}
-    </div>
+    {/* Bottom nav — replaces both old nav bars */}
+    <BottomNav tab={tab} setTab={setTab} currentUser={currentUser}/>
   </div></div>);
 }
