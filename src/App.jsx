@@ -645,15 +645,20 @@ function RadiusEdgeLabel({cx, cy, radius, radiusMiles, visibleCount}) {
   );
 }
 
-function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,interestMatch,userTags,onMatchGo,onMatchDismiss}){
+function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,interestMatch,userTags,onMatchGo,onMatchDismiss,underLens,lensSet}){
   var R=10,color=DRAFT_COLORS[chat.id]||INK;
   var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
-  var inRange=radius===null||chat.r<=radius,baseOp=inRange?1:0.2;
+  // Nearby = within lens radius in world coords (no pan offset — this is world position vs world center)
+  var nearbyInWorld=radius===null||chat.r<=radius;
+  // Visibility: if lens not set yet, show all normally; if set, ghost things outside lens
+  var outsideLens=lensSet&&!underLens;
+  var baseOp=outsideLens?0.18:1;
+  var tappable=!outsideLens; // can't tap things outside lens
   if(chat.type==="hidden"){
     if(!revealProgress||revealProgress<=0)return null;
     var rp=revealProgress,sh=0.4+0.6*Math.sin(rp*Math.PI),hatch=[];
     for(var i=-R;i<=R;i+=3.5){var hw=Math.sqrt(Math.max(0,R*R-i*i));hatch.push(<line key={i} x1={x-hw} y1={y+i} x2={x+hw} y2={y+i} stroke={color} strokeWidth="0.7" opacity={0.45*rp}/>);}
-    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp*baseOp}}>
+    return(<g onClick={tappable?()=>onClick(chat):null} style={{cursor:tappable?"pointer":"default",opacity:rp*baseOp}}>
       <circle cx={x} cy={y} r={22} fill="transparent"/>
       <circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/>
       <clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath>
@@ -662,15 +667,16 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,intere
       <text x={x} y={y+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font}>?</text>
     </g>);
   }
-  return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition:"opacity 0.25s"}}>
+  return(<g onClick={tappable?()=>onClick(chat):null} style={{cursor:tappable?"pointer":"default",opacity:baseOp,transition:"opacity 0.25s"}}>
     <circle cx={x} cy={y} r={22} fill="transparent"/>
     {highlighted&&<circle cx={x} cy={y} r={R+10} fill="none" stroke={color} strokeWidth="1.5" opacity={0.6} strokeDasharray="3 3"/>}
     {highlighted&&<circle cx={x} cy={y} r={R+18} fill="none" stroke={color} strokeWidth="0.8" opacity={0.25} strokeDasharray="2 4"/>}
     {chat.type==="open"&&<circle cx={x} cy={y} r={R} fill={color}/>}
     {chat.type==="closed"&&<circle cx={x} cy={y} r={R} fill={BG} stroke={color} strokeWidth="2"/>}
-    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inRange?1:0.3}>{chat.name.toUpperCase()}</text>
-    {/* Interest match pip rendered here, inside the marker group */}
-    {interestMatch&&<InterestMatchPip circle={chat} cx={cx} cy={cy} userTags={userTags||[]} onDismiss={onMatchDismiss} onGo={onMatchGo}/>}
+    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={nearbyInWorld?1:0.4}>{chat.name.toUpperCase()}</text>
+    {/* Subtle indicator that a circle is visible but not joinable */}
+    {underLens&&!nearbyInWorld&&<circle cx={x} cy={y+R+10} r={2} fill={INK_LIGHT}/>}
+    {interestMatch&&underLens&&<InterestMatchPip circle={chat} cx={cx} cy={cy} userTags={userTags||[]} onDismiss={onMatchDismiss} onGo={onMatchGo}/>}
   </g>);
 }
 
@@ -887,11 +893,12 @@ function BottomNav({tab, setTab, currentUser}) {
 export default function App(){
   var [currentUser,setCurrentUser]=useState(null);
   var [tab,setTab]=useState("map");
-  var [radius,setRadius]=useState(null);
-  var [drawPhase,setDrawPhase]=useState("idle");
-  var [drawPath,setDrawPath]=useState([]);
-  var [liveRadius,setLiveRadius]=useState(0);
-  var [circleScale,setCircleScale]=useState(1);
+  // ── Lens state ─────────────────────────────────────────────────────────────
+  var [lensRadius,setLensRadius]=useState(null);
+  var [lensSet,setLensSet]=useState(false);
+  var [lensScale,setLensScale]=useState(1);
+  var [lensDrawing,setLensDrawing]=useState(false);
+  var radius=lensRadius; // alias so downstream code keeps working
   var [selectedChat,setSelectedChat]=useState(null);
   var [joinTarget,setJoinTarget]=useState(null);
   var [msgInput,setMsgInput]=useState("");
@@ -1060,53 +1067,113 @@ export default function App(){
   const startPulseHold=useCallback((e)=>{if(pulseState!=="idle")return;var el=e.currentTarget.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;setTouchPt({x:((cx-el.left)/el.width)*128,y:((cy-el.top)/el.width)*128});pulseHoldStart.current=performance.now();setPulseState("charging");function tick(){var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);setHoldProgress(p);if(p<1){pulseHoldRaf.current=requestAnimationFrame(tick);}}pulseHoldRaf.current=requestAnimationFrame(tick);},[pulseState]);
   const cancelPulseHold=useCallback(()=>{if(pulseState!=="charging")return;cancelAnimationFrame(pulseHoldRaf.current);var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);if(p>=.8){firePulse();}else{setPulseState("idle");setHoldProgress(0);}},[pulseState,firePulse]);
 
-  function toSVG(cx,cy){var rect=svgRef.current.getBoundingClientRect();return{x:(cx-rect.left)*(350/rect.width),y:(cy-rect.top)*(420/rect.height)};}
-  const onDrawStart=useCallback((e)=>{e.preventDefault();setDrawPhase("drawing");setDrawPath([]);setLiveRadius(0);},[]);
-  const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
-  const onDrawEnd=useCallback(()=>{
-    setDrawPhase("done");
-    setDrawPath(path=>{
-      if(path.length>0){
-        var avg=path.reduce((sum,p)=>sum+Math.sqrt((p.x-CX)**2+(p.y-CY)**2),0)/path.length;
-        var fitted=Math.max(MIN_R,Math.min(MAX_R,avg));
-        setRadius(fitted);setCircleScale(0);
-        requestAnimationFrame(()=>{var start=performance.now(),dur=400;function tick(){var t=Math.min(1,(performance.now()-start)/dur);setCircleScale(1-Math.pow(1-t,3));if(t<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);});
-      }
-      return path;
-    });
-  },[]);
-  const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(22));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
-  const onMapDown=useCallback((e)=>{if(drawPhase==="idle"){onDrawStart(e);return;}if(drawPhase==="drawing")return;if(drawPhase==="done"){var c=e.touches?e.touches[0]:e;startPlantHold(toSVG(c.clientX,c.clientY));}},[drawPhase,onDrawStart,startPlantHold]);
-  const onMapMove=useCallback((e)=>{
-    if(drawPhase==="drawing"){onDrawMove(e);return;}
+
+  const startPlantHold=useCallback((viewportPos)=>{
+    var pos={x:viewportPos.x,y:viewportPos.y};
+    setPlantParticles(genPlantParticles(22));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;
+    function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);
+  },[]);
+
+  function toSVG(clientX,clientY){var rect=svgRef.current.getBoundingClientRect();return{x:(clientX-rect.left)*(350/rect.width),y:(clientY-rect.top)*(420/rect.height)};}
+
+  // ── Lens gesture ───────────────────────────────────────────────────────────
+  // Before lens is set: any touch/drag from anywhere sets the radius (distance from CX,CY).
+  // After lens is set: drag pans the map. Tap inside lens with hold plants a circle.
+  const MIN_LENS=60, MAX_LENS=140;
+
+  const onLensDown=useCallback((e)=>{
+    e.preventDefault();
+    var c=e.touches?e.touches[0]:e;
+    if(!lensSet){
+      setLensDrawing(true);
+      setLensSet(false);
+      var pos=toSVG(c.clientX,c.clientY);
+      var dist=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
+      setLensRadius(Math.max(MIN_LENS,Math.min(MAX_LENS,dist)));
+    } else {
+      // check if starting near the lens ring edge — if so, resize it
+      var pos2=toSVG(c.clientX,c.clientY);
+      var dist2=Math.sqrt((pos2.x-CX)**2+(pos2.y-CY)**2);
+      if(Math.abs(dist2-lensRadius)<22){
+        dragging.current=true; // reuse dragging ref for lens resize
+      } else {
+        // pan
+        isPanning.current=true;
+        panOrigin.current={x:c.clientX,y:c.clientY,px:panX,py:panY};
+        // also start plant hold if inside lens
+        if(dist2<lensRadius){
+          startPlantHold(pos2);
+        }
+      }
+    }
+  },[lensSet,lensRadius,panX,panY,startPlantHold]);
+
+  const onLensMove=useCallback((e)=>{
+    e.preventDefault();
+    var c=e.touches?e.touches[0]:e;
+    if(lensDrawing){
+      var pos=toSVG(c.clientX,c.clientY);
+      var dist=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
+      setLensRadius(Math.max(MIN_LENS,Math.min(MAX_LENS,dist)));
+      return;
+    }
     if(dragging.current&&svgRef.current){
-      var c=e.touches?e.touches[0]:e;
-      var rect=svgRef.current.getBoundingClientRect();
-      var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
-      setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
+      // resize lens
+      var pos2=toSVG(c.clientX,c.clientY);
+      var dist2=Math.sqrt((pos2.x-CX)**2+(pos2.y-CY)**2);
+      setLensRadius(Math.max(MIN_LENS,Math.min(MAX_LENS,dist2)));
       return;
     }
     if(isPanning.current&&panOrigin.current&&svgRef.current){
-      var c2=e.touches?e.touches[0]:e;
-      var rect2=svgRef.current.getBoundingClientRect();
-      var scale=350/rect2.width;
-      var dx2=(c2.clientX-panOrigin.current.x)*scale;
-      var dy2=(c2.clientY-panOrigin.current.y)*scale;
-      setPanX(panOrigin.current.px+dx2);
-      setPanY(panOrigin.current.py+dy2);
+      var rect=svgRef.current.getBoundingClientRect();
+      var scale=350/rect.width;
+      setPanX(panOrigin.current.px+(c.clientX-panOrigin.current.x)*scale);
+      setPanY(panOrigin.current.py+(c.clientY-panOrigin.current.y)*scale);
     }
-  },[drawPhase,onDrawMove,panX,panY]);
-  const onMapUp=useCallback(()=>{
-    if(drawPhase==="drawing"){onDrawEnd();return;}
-    if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
-    dragging.current=false;
-    cancelPlantHold();
-  },[drawPhase,onDrawEnd,cancelPlantHold]);
-  function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);}
-  useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
+  },[lensDrawing,panX,panY]);
 
-  function handleChatClick(chat){if(chat.type==="hidden"&&!joinedIds.has(chat.id)){setJoinTarget(chat);return;}setSelectedChat(chat);}
+  const onLensUp=useCallback(()=>{
+    if(lensDrawing){
+      // commit the lens with snap-in animation
+      setLensDrawing(false);
+      setLensSet(true);
+      setLensScale(0.88);
+      var start=performance.now();
+      function snap(){var t=Math.min(1,(performance.now()-start)/320);var e=1-Math.pow(1-t,3);setLensScale(0.88+e*0.12);if(t<1)requestAnimationFrame(snap);}
+      requestAnimationFrame(snap);
+      return;
+    }
+    if(isPanning.current){isPanning.current=false;panOrigin.current=null;cancelPlantHold();return;}
+    if(dragging.current){dragging.current=false;return;}
+    cancelPlantHold();
+  },[lensDrawing,cancelPlantHold]);
+
+  function resetLens(){setLensRadius(null);setLensSet(false);setLensScale(1);setLensDrawing(false);setPanX(0);setPanY(0);}
+
+  useEffect(()=>{
+    window.addEventListener("mousemove",onLensMove);
+    window.addEventListener("mouseup",onLensUp);
+    window.addEventListener("touchmove",onLensMove,{passive:false});
+    window.addEventListener("touchend",onLensUp);
+    return()=>{
+      window.removeEventListener("mousemove",onLensMove);
+      window.removeEventListener("mouseup",onLensUp);
+      window.removeEventListener("touchmove",onLensMove);
+      window.removeEventListener("touchend",onLensUp);
+    };
+  },[onLensMove,onLensUp]);
+
+  function handleChatClick(chat){
+    // Already a member — open chat regardless of location
+    if(joinedIds.has(chat.id)){setSelectedChat(chat);return;}
+    // Hidden and not revealed
+    if(chat.type==="hidden"&&!revealedIds.has(chat.id)){setJoinTarget(chat);return;}
+    // Not nearby in world — show info only
+    if(chat.r>radius){setSelectedChat(chat);return;}
+    // Nearby — full flow
+    setSelectedChat(chat);
+  }
   function handleJoined(chat){setJoinedIds(prev=>new Set([...prev,chat.id]));setJoinTarget(null);if(chat.msgs!==undefined)setSelectedChat(chat);}
   function handleRequestSent(chatId,req){setAllChats(prev=>prev.map(c=>c.id===chatId?{...c,pendingRequests:[...(c.pendingRequests||[]),req]}:c));}
   const handleCreateComplete=useCallback((data)=>{
@@ -1132,9 +1199,8 @@ export default function App(){
   </div></div>);}
 
   var visibleChats=radius?allChats.filter(c=>c.r<=radius&&c.type!=="hidden"):[];
-  var radiusMiles=radius?((radius/MAX_R)*2).toFixed(1):"—";
-  var hasRadius=drawPhase==="done"&&radius!==null;
-  var isDrawing=drawPhase==="drawing";
+  var radiusMiles=radius?((radius/MAX_LENS)*1.5).toFixed(1):"—";
+  var hasRadius=lensSet&&radius!==null;
   var isCharging=pulseState==="charging",isFired=pulseState==="fired",showReturn=returnProgress>0;
   var pulseLabel=isCharging?"charging...":(isFired&&!showReturn)?"pulsing...":showReturn?"incoming...":pulseState==="cooling"?"sent":"hold to pulse";
   var eased=1-Math.pow(1-returnProgress,2),retR=STAGE_R*(1-eased)+BTN_R*eased,retOp=returnProgress<.85?.7:((1-returnProgress)/.15)*.7;
@@ -1192,158 +1258,94 @@ export default function App(){
     </div>
 
     {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
-      {/* Status tab — taller row, larger text */}
       <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
-      {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
+      {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold inside your lens to plant a circle</div>}
+      {!lensRadius&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Drag to set your lens radius</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
         <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
-          onMouseDown={(e)=>{
-            // If draw phase is idle or drawing, use draw handler
-            if(drawPhase==="idle"){onDrawStart(e);return;}
-            if(drawPhase==="drawing")return;
-            if(drawPhase==="done"){
-              var c=e.touches?e.touches[0]:e;
-              // Check if starting near the radius ring (dragging it) — otherwise pan or plant
-              var pos=toSVG(c.clientX,c.clientY);
-              var distFromCenter=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
-              if(Math.abs(distFromCenter-radius)<20){
-                dragging.current=true;
-              } else {
-                // Start pan
-                isPanning.current=true;
-                panOrigin.current={x:c.clientX,y:c.clientY,px:panX,py:panY};
-              }
-            }
-          }}
-          onMouseMove={(e)=>{
-            if(drawPhase==="drawing"){onDrawMove(e);return;}
-            if(dragging.current&&svgRef.current){
-              var c=e.touches?e.touches[0]:e;
-              var rect=svgRef.current.getBoundingClientRect();
-              var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
-              setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
-              return;
-            }
-            if(isPanning.current&&panOrigin.current){
-              var c2=e.touches?e.touches[0]:e;
-              var rect2=svgRef.current.getBoundingClientRect();
-              var scale=350/rect2.width;
-              var dx2=(c2.clientX-panOrigin.current.x)*scale;
-              var dy2=(c2.clientY-panOrigin.current.y)*scale;
-              setPanX(panOrigin.current.px+dx2);
-              setPanY(panOrigin.current.py+dy2);
-            }
-          }}
-          onMouseUp={(e)=>{
-            if(drawPhase==="drawing"){onDrawEnd();return;}
-            if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
-            dragging.current=false;
-            cancelPlantHold();
-          }}
-          onTouchStart={(e)=>{
-            if(drawPhase==="idle"){onDrawStart(e);return;}
-            if(drawPhase==="drawing")return;
-            if(drawPhase==="done"){
-              var c=e.touches[0];
-              var pos=toSVG(c.clientX,c.clientY);
-              var distFromCenter=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
-              if(Math.abs(distFromCenter-radius)<20){
-                dragging.current=true;
-              } else if(e.touches.length===1){
-                isPanning.current=true;
-                panOrigin.current={x:c.clientX,y:c.clientY,px:panX,py:panY};
-              }
-            }
-          }}
-          onTouchMove={(e)=>{
-            e.preventDefault();
-            if(drawPhase==="drawing"){onDrawMove(e);return;}
-            if(dragging.current&&svgRef.current){
-              var c=e.touches[0];
-              var rect=svgRef.current.getBoundingClientRect();
-              var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
-              setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
-              return;
-            }
-            if(isPanning.current&&panOrigin.current&&e.touches.length===1){
-              var c2=e.touches[0];
-              var rect2=svgRef.current.getBoundingClientRect();
-              var scale=350/rect2.width;
-              var dx2=(c2.clientX-panOrigin.current.x)*scale;
-              var dy2=(c2.clientY-panOrigin.current.y)*scale;
-              setPanX(panOrigin.current.px+dx2);
-              setPanY(panOrigin.current.py+dy2);
-            }
-          }}
-          onTouchEnd={(e)=>{
-            if(drawPhase==="drawing"){onDrawEnd();return;}
-            if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
-            dragging.current=false;
-            cancelPlantHold();
-          }}>
+          onMouseDown={onLensDown} onTouchStart={onLensDown}>
 
-          {/* City map layer — replace this component with Mapbox integration later */}
+          {/* City map layer — scrolls with pan */}
           <CityMapLayer panX={panX} panY={panY}/>
 
-          {/* All overlays in a pan group so circles/markers move with the map */}
+          {/* Markers + overlays — in world space, panned */}
           <g transform={`translate(${panX},${panY})`}>
-            {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
-            {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
-              <path d={wobblyPath(CX,CY,radius,3.7)} fill={INK} fillOpacity="0.04"/>
-              <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke="transparent" strokeWidth="28" style={{cursor:"grab"}} onMouseDown={e=>{dragging.current=true;e.preventDefault();e.stopPropagation();}} onTouchStart={e=>{dragging.current=true;e.stopPropagation();}}/>
-              <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke={INK} strokeWidth="2" style={{pointerEvents:"none"}}/>
-              {[0,90,180,270].map(ang=>{var rad=(ang*Math.PI)/180;var wr=radius+2.2*Math.sin(rad*5+3.7)+.9*Math.sin(rad*11+3.32);var ox2=CX+wr*Math.cos(rad-Math.PI/2),oy2=CY+wr*Math.sin(rad-Math.PI/2);var nx=Math.cos(rad-Math.PI/2),ny=Math.sin(rad-Math.PI/2);return <line key={ang} x1={ox2-nx*7} y1={oy2-ny*7} x2={ox2+nx*7} y2={oy2+ny*7} stroke={INK} strokeWidth="1.5" style={{pointerEvents:"none"}}/>;  })}
-              {isFired&&<PulseRipples cx={CX} cy={CY} maxR={radius} progress={rippleProgress}/>}
-              {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
-              {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
-              {/* Inline radius label — anchored to bottom of ring */}
-              <RadiusEdgeLabel cx={CX} cy={CY} radius={radius} radiusMiles={radiusMiles} visibleCount={visibleChats.length}/>
-            </g>)}
-            {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x-panX} py={plantPos.y-panY} stamp={false} particles={plantParticles}/>}
-            {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x-panX} py={plantPos.y-panY} stamp={true} particles={plantParticles}/>}
-            {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-panX-8} y1={plantPos.y-panY} x2={plantPos.x-panX+8} y2={plantPos.y-panY} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x-panX} y1={plantPos.y-panY-8} x2={plantPos.x-panX} y2={plantPos.y-panY+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
+            {allChats.map(c=>{
+              // World position of marker
+              var mx=CX+c.r*Math.cos((c.angle*Math.PI)/180);
+              var my=CY+c.r*Math.sin((c.angle*Math.PI)/180);
+              // Distance from lens center in screen space (lens center = CX,CY always)
+              var screenX=mx+panX, screenY=my+panY;
+              var distFromLens=Math.sqrt((screenX-CX)**2+(screenY-CY)**2);
+              var underLens=lensRadius&&distFromLens<=lensRadius;
+              return <ChatMarker key={c.id} chat={c} cx={CX} cy={CY}
+                onClick={handleChatClick}
+                radius={radius}
+                revealProgress={revealProgress[c.id]||0}
+                highlighted={highlightedCircleId===c.id}
+                interestMatch={interestMatchCircle?.id===c.id}
+                userTags={currentUser.tags||[]}
+                onMatchGo={goToInterestMatch}
+                onMatchDismiss={()=>setInterestMatchCircle(null)}
+                underLens={underLens}
+                lensSet={lensSet}/>;
+            })}
             {nearbyUserCoalesce&&<CoalesceParticles progress={nearbyUserProgress} particles={nearbyUserCoalesce}/>}
             {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
             {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
             {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-            {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} interestMatch={interestMatchCircle?.id===c.id} userTags={currentUser.tags||[]} onMatchGo={goToInterestMatch} onMatchDismiss={()=>setInterestMatchCircle(null)}/>)}
+            {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
+            {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
+            {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-8} y1={plantPos.y} x2={plantPos.x+8} y2={plantPos.y} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x} y1={plantPos.y-8} x2={plantPos.x} y2={plantPos.y+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
           </g>
 
-          {/* User dot — always centered, not panned */}
+          {/* ── Lens ring — fixed to viewport, never pans ── */}
+          {lensRadius&&(<g style={{pointerEvents:"none"}} transform={`translate(${CX},${CY}) scale(${lensScale}) translate(${-CX},${-CY})`}>
+            {/* Outside-lens fog overlay — clips to everything outside the circle */}
+            <defs>
+              <mask id="lensMask">
+                <rect x="0" y="0" width="350" height="420" fill="white"/>
+                <circle cx={CX} cy={CY} r={lensRadius-1} fill="black"/>
+              </mask>
+            </defs>
+            <rect x="0" y="0" width="350" height="420" fill={BG} opacity="0.62" mask="url(#lensMask)"/>
+            {/* Lens ring */}
+            <path d={wobblyPath(CX,CY,lensRadius,3.7)} fill="none" stroke={INK} strokeWidth={lensSet?"2":"1.5"} opacity={lensSet?1:0.6} strokeDasharray={lensSet?"none":"5 4"}/>
+            {/* Tick marks at cardinal points */}
+            {lensSet&&[0,90,180,270].map(ang=>{var rad=(ang*Math.PI)/180;var wr=lensRadius+2.2*Math.sin(rad*5+3.7)+.9*Math.sin(rad*11+3.32);var ox2=CX+wr*Math.cos(rad-Math.PI/2),oy2=CY+wr*Math.sin(rad-Math.PI/2);var nx=Math.cos(rad-Math.PI/2),ny=Math.sin(rad-Math.PI/2);return <line key={ang} x1={ox2-nx*7} y1={oy2-ny*7} x2={ox2+nx*7} y2={oy2+ny*7} stroke={INK} strokeWidth="1.5"/>;  })}
+            {/* Pulse effects stay inside lens */}
+            {isFired&&<PulseRipples cx={CX} cy={CY} maxR={lensRadius} progress={rippleProgress}/>}
+            {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={lensRadius} particles={outwardParticles}/>}
+            {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={lensRadius} particles={inwardParticles}/>}
+            {/* Radius label */}
+            {lensSet&&<RadiusEdgeLabel cx={CX} cy={CY} radius={lensRadius} radiusMiles={radiusMiles} visibleCount={visibleChats.length}/>}
+          </g>)}
+
+          {/* User dot — always at center */}
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={1.5} fill={BG} style={{pointerEvents:"none"}}/>
           <text x={CX+8} y={CY+13} fontSize="8" fill={INK_MID} fontFamily={font} letterSpacing="1" fontWeight="600" style={{pointerEvents:"none"}}>{currentUser.handle.toUpperCase()}</text>
-
-          {/* Draw path — not panned, in viewport coords */}
-          {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7" style={{pointerEvents:"none"}}/>}
         </svg>
 
-        {/* Center-on-me button — bottom-left */}
+        {/* Return to me — bottom-left, appears when panned */}
         {(panX!==0||panY!==0)&&(
-          <button onClick={()=>{setPanX(0);setPanY(0);}} title="Center on me" style={{
-            position:"absolute", bottom:14, left:14,
-            width:36, height:36,
-            background:BG, border:"1.5px solid "+INK,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            cursor:"pointer", zIndex:40,
-            boxShadow:"1px 1px 0 "+INK_LIGHT,
-            fontFamily:font, fontSize:14,
+          <button onClick={()=>{setPanX(0);setPanY(0);}} title="Return to me" style={{
+            position:"absolute",bottom:14,left:14,width:36,height:36,
+            background:BG,border:"1.5px solid "+INK,display:"flex",alignItems:"center",
+            justifyContent:"center",cursor:"pointer",zIndex:40,
+            boxShadow:"1px 1px 0 "+INK_LIGHT,fontFamily:font,fontSize:14,
           }}>◎</button>
         )}
 
-        {/* Floating reset button — bottom-right, only when radius is drawn */}
-        {hasRadius&&(
-          <button onClick={resetRadius} title="Reset radius" style={{
-            position:"absolute", bottom:14, right:14,
-            width:36, height:36,
-            background:BG, border:"1.5px solid "+INK,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            cursor:"pointer", zIndex:40,
+        {/* Redraw lens — bottom-right, only when lens is set */}
+        {lensSet&&(
+          <button onClick={resetLens} title="Redraw lens" style={{
+            position:"absolute",bottom:14,right:14,width:36,height:36,
+            background:BG,border:"1.5px solid "+INK,display:"flex",alignItems:"center",
+            justifyContent:"center",cursor:"pointer",zIndex:40,
             boxShadow:"1px 1px 0 "+INK_LIGHT,
-          }}>
-            <ResetIcon/>
-          </button>
+          }}><ResetIcon/></button>
         )}
 
         {mapDimProgress>0&&<div style={{position:"absolute",inset:0,background:INK,opacity:mapDimProgress,pointerEvents:"none",transition:"opacity 0.08s"}}/>}
