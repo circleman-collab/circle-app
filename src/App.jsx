@@ -632,6 +632,13 @@ function CreateFlow({onComplete,onCancel}){
 }
 
 export default function App(){
+  // Inject once: kill iOS tap-highlight and text-selection on all interactive elements
+  useEffect(()=>{
+    var s=document.createElement("style");
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}";
+    document.head.appendChild(s);
+    return()=>s.remove();
+  },[]);
   var [currentUser,setCurrentUser]=useState(null);
   var [tab,setTab]=useState("map");
   var [radius,setRadius]=useState(null);
@@ -742,7 +749,7 @@ export default function App(){
       setProgress(p);if(onTick)onTick(p);
       var dim=p<0.55?(p/0.55)*0.46:p<0.78?0.46:Math.max(0,0.46*(1-(p-0.78)/0.08));
       setMapDimProgress(dim);
-      if(p<1){rafRef.current=requestAnimationFrame(tick);}else{setMapDimProgress(0);setCard(true);}
+      if(p<1){rafRef.current=requestAnimationFrame(tick);}else{setMapDimProgress(0);setCoalesce(null);setCard(true);}
     }
     rafRef.current=requestAnimationFrame(tick);
     setTab("map");
@@ -860,7 +867,7 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none"};
+  var outerShell={background:BG_OUTER,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent"};
   var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:390,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"4px 4px 0px "+INK+", 7px 7px 0px "+INK_LIGHT,margin:"12px",position:"relative"};
 
   if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
