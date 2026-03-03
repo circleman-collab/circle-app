@@ -459,6 +459,132 @@ const INIT_CHATS=[
   makeCircle({id:6,ownerId:"user_studio",name:"Studio Session",type:"closed",dist:0.9,members:4,angle:-18,r:188,msgs:normalizeMsgs(["tracking starts 8pm"]),tags:["rock","metal","indie","performer"],governance:{mode:"admin",admins:["user_studio"]}}),
 ];
 
+// ── City Map ──────────────────────────────────────────────────────────────────
+// Isolated component — swap this for Mapbox later by replacing just this function.
+// Renders an ink/newsprint-style SVG street grid centered on the user's position.
+// All coordinates are in the same SVG space as the rest of the map (350×420).
+// Pan offset is applied externally via a <g transform> in the map tab render.
+
+const CITY_BLOCKS = (() => {
+  // Streets: arrays of [x1,y1,x2,y2] in a 1400×1680 world space (4× the viewport)
+  // User is at world center (700, 840). Viewport shows 350×420 centered on user.
+  var streets = [];
+  var labels = [];
+
+  // Horizontal streets — spaced ~60px, spanning full width
+  var hStreets = [
+    {y:480, name:"ELM ST", major:true},
+    {y:540, name:""},
+    {y:600, name:"OAK AVE", major:false},
+    {y:660, name:""},
+    {y:720, name:"MAPLE DR", major:true},
+    {y:780, name:""},
+    {y:840, name:"MAIN ST", major:true},   // user's street
+    {y:900, name:""},
+    {y:960, name:"PINE RD", major:true},
+    {y:1020, name:""},
+    {y:1080, name:"CEDAR BLVD", major:false},
+    {y:1140, name:""},
+    {y:1200, name:"ASH ST", major:true},
+  ];
+
+  // Vertical streets
+  var vStreets = [
+    {x:340, name:"1ST AVE", major:false},
+    {x:420, name:""},
+    {x:500, name:"RIVER RD", major:true},
+    {x:560, name:""},
+    {x:620, name:"MILL ST", major:false},
+    {x:700, name:"CENTER AVE", major:true}, // user's column
+    {x:780, name:""},
+    {x:840, name:"PARK BLVD", major:true},
+    {x:900, name:""},
+    {x:980, name:"GROVE ST", major:false},
+    {x:1060, name:""},
+  ];
+
+  hStreets.forEach(s => {
+    streets.push({x1:200,y1:s.y,x2:1200,y2:s.y,major:s.major});
+    if(s.name) labels.push({x:210,y:s.y-3,text:s.name,horiz:true});
+  });
+  vStreets.forEach(s => {
+    streets.push({x1:s.x,y1:360,x2:s.x,y2:1320,major:s.major,vert:true});
+    if(s.name) labels.push({x:s.x,y:370,text:s.name,horiz:false});
+  });
+
+  // A few diagonal streets for character
+  streets.push({x1:340,y1:480,x2:500,y2:660,diag:true});
+  streets.push({x1:900,y1:840,x2:1060,y2:660,diag:true});
+
+  // Landmark blocks (filled rects in world space)
+  var landmarks = [
+    {x:512,y:852,w:76,h:56,name:"PARK",fill:true},
+    {x:622,y:762,w:56,h:48,name:"MARKET",fill:false},
+    {x:712,y:662,w:88,h:44,name:"LIBRARY",fill:false},
+    {x:812,y:862,w:64,h:52,name:"STATION",fill:true},
+    {x:432,y:692,w:52,h:40,name:"GALLERY",fill:false},
+    {x:730,y:960,w:70,h:50,name:"PLAZA",fill:true},
+  ];
+
+  return {streets, labels, landmarks};
+})();
+
+function CityMapLayer({panX, panY}) {
+  var {streets, labels, landmarks} = CITY_BLOCKS;
+  // World origin is at (700,840). We offset so user is at SVG (175,210) = viewport center.
+  // pan shifts the world further.
+  var ox = 175 - 700 + panX;
+  var oy = 210 - 840 + panY;
+
+  function wx(x){ return x + ox; }
+  function wy(y){ return y + oy; }
+
+  return (
+    <g style={{pointerEvents:"none"}}>
+      {/* Background */}
+      <rect x={wx(150)} y={wy(350)} width={1100} height={1000} fill={BG}/>
+
+      {/* City blocks background fill */}
+      <rect x={wx(200)} y={wy(400)} width={1000} height={900} fill={BG_OUTER} opacity="0.5"/>
+
+      {/* Streets */}
+      {streets.map((s,i) => (
+        <line key={i}
+          x1={wx(s.x1)} y1={wy(s.y1)} x2={wx(s.x2)} y2={wy(s.y2)}
+          stroke={s.major ? INK_MID : INK_LIGHT}
+          strokeWidth={s.major ? 1.2 : 0.6}
+          opacity={s.diag ? 0.4 : (s.major ? 0.55 : 0.3)}
+        />
+      ))}
+
+      {/* Landmark blocks */}
+      {landmarks.map((l,i) => (
+        <g key={i}>
+          <rect x={wx(l.x)} y={wy(l.y)} width={l.w} height={l.h}
+            fill={l.fill ? INK_LIGHT : BG}
+            stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.5"/>
+          <text x={wx(l.x + l.w/2)} y={wy(l.y + l.h/2 + 3)}
+            textAnchor="middle" fontSize="5.5" fontWeight="700"
+            fill={INK_MID} fontFamily={font} letterSpacing="0.8" opacity="0.7">
+            {l.name}
+          </text>
+        </g>
+      ))}
+
+      {/* Street labels */}
+      {labels.map((l,i) => (
+        <text key={i}
+          x={wx(l.x)} y={wy(l.y)}
+          fontSize="5" fontWeight="600" fill={INK_MID}
+          fontFamily={font} letterSpacing="0.6" opacity="0.5"
+          transform={l.horiz ? undefined : `rotate(-90,${wx(l.x)},${wy(l.y)})`}>
+          {l.text}
+        </text>
+      ))}
+    </g>
+  );
+}
+
 function wobblyPath(cx,cy,r,seed,steps,amp){steps=steps||120;amp=amp||2.2;var d="";for(var i=0;i<=steps;i++){var t=(i/steps)*Math.PI*2;var wr=r+amp*Math.sin(t*5+seed)+amp*0.4*Math.sin(t*11+seed*0.9);d+=(i===0?"M ":"L ")+(cx+wr*Math.cos(t-Math.PI/2))+" "+(cy+wr*Math.sin(t-Math.PI/2))+" ";}return d+"Z";}
 function genPulseParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.55;p.push({angle:a,dist:55+Math.random()*110,size:0.8+Math.random()*2.8,delay:Math.random()*.28,drift:(Math.random()-.5)*4.5,driftFreq:1.2+Math.random()*3.5});}return p;}
 function genOutwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.25;p.push({angle:a,travelMult:1.1+Math.random()*1.8,size:.8+Math.random()*2.2,delay:Math.random()*.22,drift:(Math.random()-.5)*3.5,driftFreq:1.5+Math.random()*3,brightness:.4+Math.random()*.6});}return p;}
@@ -805,6 +931,10 @@ export default function App(){
   var [highlightedCircleId,setHighlightedCircleId]=useState(null);
   var [bumpActive,setBumpActive]=useState(false);
   var [bumpPulse,setBumpPulse]=useState(1);
+  var [panX,setPanX]=useState(0);
+  var [panY,setPanY]=useState(0);
+  var panOrigin=useRef(null);
+  var isPanning=useRef(false);
 
   var bumpRaf=useRef(null),bumpT=useRef(0);
   var nearbyPersonRaf=useRef(null),nearbyPersonStart=useRef(null);
@@ -948,8 +1078,31 @@ export default function App(){
   const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(22));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
   const onMapDown=useCallback((e)=>{if(drawPhase==="idle"){onDrawStart(e);return;}if(drawPhase==="drawing")return;if(drawPhase==="done"){var c=e.touches?e.touches[0]:e;startPlantHold(toSVG(c.clientX,c.clientY));}},[drawPhase,onDrawStart,startPlantHold]);
-  const onMapMove=useCallback((e)=>{if(drawPhase==="drawing"){onDrawMove(e);return;}if(dragging.current&&svgRef.current){var c=e.touches?e.touches[0]:e;var rect=svgRef.current.getBoundingClientRect();var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));}},[drawPhase,onDrawMove]);
-  const onMapUp=useCallback(()=>{if(drawPhase==="drawing"){onDrawEnd();return;}dragging.current=false;cancelPlantHold();},[drawPhase,onDrawEnd,cancelPlantHold]);
+  const onMapMove=useCallback((e)=>{
+    if(drawPhase==="drawing"){onDrawMove(e);return;}
+    if(dragging.current&&svgRef.current){
+      var c=e.touches?e.touches[0]:e;
+      var rect=svgRef.current.getBoundingClientRect();
+      var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
+      setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
+      return;
+    }
+    if(isPanning.current&&panOrigin.current&&svgRef.current){
+      var c2=e.touches?e.touches[0]:e;
+      var rect2=svgRef.current.getBoundingClientRect();
+      var scale=350/rect2.width;
+      var dx2=(c2.clientX-panOrigin.current.x)*scale;
+      var dy2=(c2.clientY-panOrigin.current.y)*scale;
+      setPanX(panOrigin.current.px+dx2);
+      setPanY(panOrigin.current.py+dy2);
+    }
+  },[drawPhase,onDrawMove,panX,panY]);
+  const onMapUp=useCallback(()=>{
+    if(drawPhase==="drawing"){onDrawEnd();return;}
+    if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
+    dragging.current=false;
+    cancelPlantHold();
+  },[drawPhase,onDrawEnd,cancelPlantHold]);
   function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);}
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
@@ -1044,36 +1197,140 @@ export default function App(){
       {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
         <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
-          onMouseDown={onMapDown} onMouseMove={onMapMove} onMouseUp={onMapUp}
-          onTouchStart={onMapDown} onTouchMove={onMapMove} onTouchEnd={onMapUp}>
-          <rect x="0" y="0" width="350" height="420" fill={BG}/>
-          {[70,130,190,250].map(r=><circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={INK_LIGHT} strokeWidth="0.8"/>)}
-          {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
-          {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7"/>}
-          {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
-            <path d={wobblyPath(CX,CY,radius,3.7)} fill={INK} fillOpacity="0.04"/>
-            <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke="transparent" strokeWidth="28" style={{cursor:"grab"}} onMouseDown={e=>{dragging.current=true;e.preventDefault();e.stopPropagation();}} onTouchStart={e=>{dragging.current=true;e.stopPropagation();}}/>
-            <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke={INK} strokeWidth="2" style={{pointerEvents:"none"}}/>
-            {[0,90,180,270].map(ang=>{var rad=(ang*Math.PI)/180;var wr=radius+2.2*Math.sin(rad*5+3.7)+.9*Math.sin(rad*11+3.32);var ox=CX+wr*Math.cos(rad-Math.PI/2),oy=CY+wr*Math.sin(rad-Math.PI/2);var nx=Math.cos(rad-Math.PI/2),ny=Math.sin(rad-Math.PI/2);return <line key={ang} x1={ox-nx*7} y1={oy-ny*7} x2={ox+nx*7} y2={oy+ny*7} stroke={INK} strokeWidth="1.5" style={{pointerEvents:"none"}}/>;  })}
-            {isFired&&<PulseRipples cx={CX} cy={CY} maxR={radius} progress={rippleProgress}/>}
-            {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
-            {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
-            {/* Inline radius label — anchored to bottom of ring */}
-            <RadiusEdgeLabel cx={CX} cy={CY} radius={radius} radiusMiles={radiusMiles} visibleCount={visibleChats.length}/>
-          </g>)}
-          {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
-          {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
-          {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-8} y1={plantPos.y} x2={plantPos.x+8} y2={plantPos.y} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x} y1={plantPos.y-8} x2={plantPos.x} y2={plantPos.y+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
-          {nearbyUserCoalesce&&<CoalesceParticles progress={nearbyUserProgress} particles={nearbyUserCoalesce}/>}
-          {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
-          {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
-          {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-          {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} interestMatch={interestMatchCircle?.id===c.id} userTags={currentUser.tags||[]} onMatchGo={goToInterestMatch} onMatchDismiss={()=>setInterestMatchCircle(null)}/>)}
+          onMouseDown={(e)=>{
+            // If draw phase is idle or drawing, use draw handler
+            if(drawPhase==="idle"){onDrawStart(e);return;}
+            if(drawPhase==="drawing")return;
+            if(drawPhase==="done"){
+              var c=e.touches?e.touches[0]:e;
+              // Check if starting near the radius ring (dragging it) — otherwise pan or plant
+              var pos=toSVG(c.clientX,c.clientY);
+              var distFromCenter=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
+              if(Math.abs(distFromCenter-radius)<20){
+                dragging.current=true;
+              } else {
+                // Start pan
+                isPanning.current=true;
+                panOrigin.current={x:c.clientX,y:c.clientY,px:panX,py:panY};
+              }
+            }
+          }}
+          onMouseMove={(e)=>{
+            if(drawPhase==="drawing"){onDrawMove(e);return;}
+            if(dragging.current&&svgRef.current){
+              var c=e.touches?e.touches[0]:e;
+              var rect=svgRef.current.getBoundingClientRect();
+              var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
+              setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
+              return;
+            }
+            if(isPanning.current&&panOrigin.current){
+              var c2=e.touches?e.touches[0]:e;
+              var rect2=svgRef.current.getBoundingClientRect();
+              var scale=350/rect2.width;
+              var dx2=(c2.clientX-panOrigin.current.x)*scale;
+              var dy2=(c2.clientY-panOrigin.current.y)*scale;
+              setPanX(panOrigin.current.px+dx2);
+              setPanY(panOrigin.current.py+dy2);
+            }
+          }}
+          onMouseUp={(e)=>{
+            if(drawPhase==="drawing"){onDrawEnd();return;}
+            if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
+            dragging.current=false;
+            cancelPlantHold();
+          }}
+          onTouchStart={(e)=>{
+            if(drawPhase==="idle"){onDrawStart(e);return;}
+            if(drawPhase==="drawing")return;
+            if(drawPhase==="done"){
+              var c=e.touches[0];
+              var pos=toSVG(c.clientX,c.clientY);
+              var distFromCenter=Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2);
+              if(Math.abs(distFromCenter-radius)<20){
+                dragging.current=true;
+              } else if(e.touches.length===1){
+                isPanning.current=true;
+                panOrigin.current={x:c.clientX,y:c.clientY,px:panX,py:panY};
+              }
+            }
+          }}
+          onTouchMove={(e)=>{
+            e.preventDefault();
+            if(drawPhase==="drawing"){onDrawMove(e);return;}
+            if(dragging.current&&svgRef.current){
+              var c=e.touches[0];
+              var rect=svgRef.current.getBoundingClientRect();
+              var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
+              setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
+              return;
+            }
+            if(isPanning.current&&panOrigin.current&&e.touches.length===1){
+              var c2=e.touches[0];
+              var rect2=svgRef.current.getBoundingClientRect();
+              var scale=350/rect2.width;
+              var dx2=(c2.clientX-panOrigin.current.x)*scale;
+              var dy2=(c2.clientY-panOrigin.current.y)*scale;
+              setPanX(panOrigin.current.px+dx2);
+              setPanY(panOrigin.current.py+dy2);
+            }
+          }}
+          onTouchEnd={(e)=>{
+            if(drawPhase==="drawing"){onDrawEnd();return;}
+            if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
+            dragging.current=false;
+            cancelPlantHold();
+          }}>
+
+          {/* City map layer — replace this component with Mapbox integration later */}
+          <CityMapLayer panX={panX} panY={panY}/>
+
+          {/* All overlays in a pan group so circles/markers move with the map */}
+          <g transform={`translate(${panX},${panY})`}>
+            {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
+            {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
+              <path d={wobblyPath(CX,CY,radius,3.7)} fill={INK} fillOpacity="0.04"/>
+              <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke="transparent" strokeWidth="28" style={{cursor:"grab"}} onMouseDown={e=>{dragging.current=true;e.preventDefault();e.stopPropagation();}} onTouchStart={e=>{dragging.current=true;e.stopPropagation();}}/>
+              <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke={INK} strokeWidth="2" style={{pointerEvents:"none"}}/>
+              {[0,90,180,270].map(ang=>{var rad=(ang*Math.PI)/180;var wr=radius+2.2*Math.sin(rad*5+3.7)+.9*Math.sin(rad*11+3.32);var ox2=CX+wr*Math.cos(rad-Math.PI/2),oy2=CY+wr*Math.sin(rad-Math.PI/2);var nx=Math.cos(rad-Math.PI/2),ny=Math.sin(rad-Math.PI/2);return <line key={ang} x1={ox2-nx*7} y1={oy2-ny*7} x2={ox2+nx*7} y2={oy2+ny*7} stroke={INK} strokeWidth="1.5" style={{pointerEvents:"none"}}/>;  })}
+              {isFired&&<PulseRipples cx={CX} cy={CY} maxR={radius} progress={rippleProgress}/>}
+              {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
+              {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
+              {/* Inline radius label — anchored to bottom of ring */}
+              <RadiusEdgeLabel cx={CX} cy={CY} radius={radius} radiusMiles={radiusMiles} visibleCount={visibleChats.length}/>
+            </g>)}
+            {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x-panX} py={plantPos.y-panY} stamp={false} particles={plantParticles}/>}
+            {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x-panX} py={plantPos.y-panY} stamp={true} particles={plantParticles}/>}
+            {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-panX-8} y1={plantPos.y-panY} x2={plantPos.x-panX+8} y2={plantPos.y-panY} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x-panX} y1={plantPos.y-panY-8} x2={plantPos.x-panX} y2={plantPos.y-panY+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
+            {nearbyUserCoalesce&&<CoalesceParticles progress={nearbyUserProgress} particles={nearbyUserCoalesce}/>}
+            {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
+            {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
+            {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
+            {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} interestMatch={interestMatchCircle?.id===c.id} userTags={currentUser.tags||[]} onMatchGo={goToInterestMatch} onMatchDismiss={()=>setInterestMatchCircle(null)}/>)}
+          </g>
+
+          {/* User dot — always centered, not panned */}
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={1.5} fill={BG} style={{pointerEvents:"none"}}/>
           <text x={CX+8} y={CY+13} fontSize="8" fill={INK_MID} fontFamily={font} letterSpacing="1" fontWeight="600" style={{pointerEvents:"none"}}>{currentUser.handle.toUpperCase()}</text>
+
+          {/* Draw path — not panned, in viewport coords */}
+          {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7" style={{pointerEvents:"none"}}/>}
         </svg>
+
+        {/* Center-on-me button — bottom-left */}
+        {(panX!==0||panY!==0)&&(
+          <button onClick={()=>{setPanX(0);setPanY(0);}} title="Center on me" style={{
+            position:"absolute", bottom:14, left:14,
+            width:36, height:36,
+            background:BG, border:"1.5px solid "+INK,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            cursor:"pointer", zIndex:40,
+            boxShadow:"1px 1px 0 "+INK_LIGHT,
+            fontFamily:font, fontSize:14,
+          }}>◎</button>
+        )}
 
         {/* Floating reset button — bottom-right, only when radius is drawn */}
         {hasRadius&&(
