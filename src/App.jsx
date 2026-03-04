@@ -500,15 +500,91 @@ const INIT_CHATS=[
 
 function wobblyPath(cx,cy,r,seed,steps,amp){steps=steps||120;amp=amp||2.2;var d="";for(var i=0;i<=steps;i++){var t=(i/steps)*Math.PI*2;var wr=r+amp*Math.sin(t*5+seed)+amp*0.4*Math.sin(t*11+seed*0.9);d+=(i===0?"M ":"L ")+(cx+wr*Math.cos(t-Math.PI/2))+" "+(cy+wr*Math.sin(t-Math.PI/2))+" ";}return d+"Z";}
 
+// Andersonville, Chicago — centered on Clark & Foster (41.9763, -87.6686)
+// World space: 1400x1680px. User (Clark & Foster) maps to viewport center (175,210) at world (700,840).
+// Chicago grid: ~8 blocks/mile. 1 block ~ 330ft. Scale: ~1px = 2.2ft, so 1 block ~ 150px world.
+// N/S streets run vertically. E/W streets run horizontally.
+// Chicago address grid: 800 N per mile going north, 800 W per mile going west.
+// Clark St runs diagonally NW (unique — not on grid).
 const CITY_BLOCKS=(()=>{
   var streets=[],labels=[];
-  var hStreets=[{y:480,name:"ELM ST",major:true},{y:540,name:"",major:false},{y:600,name:"OAK AVE",major:false},{y:660,name:"",major:false},{y:720,name:"MAPLE DR",major:true},{y:780,name:"",major:false},{y:840,name:"MAIN ST",major:true},{y:900,name:"",major:false},{y:960,name:"PINE RD",major:true},{y:1020,name:"",major:false},{y:1080,name:"CEDAR BLVD",major:false},{y:1140,name:"",major:false},{y:1200,name:"ASH ST",major:true}];
-  var vStreets=[{x:340,name:"1ST AVE",major:false},{x:420,name:"",major:false},{x:500,name:"RIVER RD",major:true},{x:560,name:"",major:false},{x:620,name:"MILL ST",major:false},{x:700,name:"CENTER AVE",major:true},{x:780,name:"",major:false},{x:840,name:"PARK BLVD",major:true},{x:900,name:"",major:false},{x:980,name:"GROVE ST",major:false},{x:1060,name:"",major:false}];
-  hStreets.forEach(s=>{streets.push({x1:200,y1:s.y,x2:1200,y2:s.y,major:s.major});if(s.name)labels.push({x:212,y:s.y-3,text:s.name,horiz:true});});
-  vStreets.forEach(s=>{streets.push({x1:s.x,y1:360,x2:s.x,y2:1320,major:s.major,vert:true});if(s.name)labels.push({x:s.x,y:372,text:s.name,horiz:false});});
-  streets.push({x1:340,y1:480,x2:500,y2:660,diag:true});
-  streets.push({x1:900,y1:840,x2:1060,y2:660,diag:true});
-  var landmarks=[{x:512,y:852,w:76,h:56,name:"PARK",fill:true},{x:622,y:762,w:56,h:48,name:"MARKET",fill:false},{x:712,y:662,w:88,h:44,name:"LIBRARY",fill:false},{x:812,y:862,w:64,h:52,name:"STATION",fill:true},{x:432,y:692,w:52,h:40,name:"GALLERY",fill:false},{x:730,y:960,w:70,h:50,name:"PLAZA",fill:true}];
+
+  // --- East-West streets (horizontal) ---
+  // Each Chicago block = ~100px in world space (8 blocks/mi, ~800px/mi world)
+  // Foster Ave = 5200N (center, y=840)
+  var ewStreets=[
+    {y:540, name:"BRYN MAWR AVE", major:true},   // 5600N (+400N = +400px up)
+    {y:640, name:"BERWYN AVE",    major:false},   // 5400N
+    {y:740, name:"SUMMERDALE AVE",major:false},   // 5300N (minor)
+    {y:840, name:"FOSTER AVE",    major:true},    // 5200N — CENTER
+    {y:940, name:"WINONA ST",     major:false},   // 5100N
+    {y:1040,name:"LAWRENCE AVE",  major:true},    // 4800N (arterial, ~400px south)
+    {y:1140,name:"LELAND AVE",    major:false},   // 4700N
+    {y:1240,name:"WILSON AVE",    major:true},    // 4600N
+    {y:440, name:"DEVON AVE",     major:true},    // 6400N (far north arterial)
+  ];
+
+  // --- North-South streets (vertical) ---
+  // Clark & Foster = center x=700. Clark is diagonal so we handle separately.
+  // Sheridan Rd ~ 400W (x~580), Broadway ~ 600W (x~460 — wait, Broadway is east of Clark)
+  // In Andersonville: Ashland=1600W, Clark=1000W(approx), Broadway=700W(approx), Sheridan=400W
+  // Spacing: 1 Chicago "hundred" W ~ 80px world
+  var nsStreets=[
+    {x:460, name:"SHERIDAN RD",  major:true},    // ~400W (east side)
+    {x:560, name:"BROADWAY",     major:true},    // ~600W
+    {x:700, name:"",             major:false},   // Winthrop Ave ~900W (minor)
+    {x:760, name:"WINTHROP AVE", major:false},
+    {x:840, name:"",             major:false},   // Kenmore minor
+    {x:920, name:"ASHLAND AVE",  major:true},    // ~1600W (western arterial for area)
+    {x:380, name:"",             major:false},   // Lakewood minor east
+    {x:1020,name:"MAGNOLIA AVE", major:false},
+    {x:1100,name:"PAULINA ST",   major:false},
+  ];
+
+  ewStreets.forEach(s=>{
+    streets.push({x1:250,y1:s.y,x2:1200,y2:s.y,major:s.major});
+    if(s.name)labels.push({x:258,y:s.y-4,text:s.name,horiz:true});
+  });
+
+  nsStreets.forEach(s=>{
+    streets.push({x1:s.x,y1:350,x2:s.x,y2:1350,major:s.major,vert:true});
+    if(s.name)labels.push({x:s.x,y:362,text:s.name,horiz:false});
+  });
+
+  // --- Clark Street — diagonal, runs NW to SE through center ---
+  // Clark enters bottom-right, exits top-left. Passes through (700,840).
+  // Approx angle: ~15° west of north (runs NNW). In SVG: as y decreases, x decreases.
+  // Slope: for every 100px north (y-100), x shifts ~-28px west
+  streets.push({x1:820,y1:1350,x2:560,y2:350,diag:true,major:true,name:"CLARK ST"});
+  labels.push({x:810,y:1310,text:"CLARK ST",horiz:true,diagonal:true});
+
+  // --- Broadway curves — approximate as two segments ---
+  // Broadway tracks roughly parallel to Clark but slightly different angle north of Lawrence
+  streets.push({x1:560,y1:1350,x2:500,y2:840,diag:true,major:false});
+  streets.push({x1:500,y1:840,x2:460,y2:350,diag:true,major:false});
+
+  // --- Landmarks ---
+  var landmarks=[
+    // Andersonville main strip (Clark St corridor, Foster area)
+    {x:670,y:800,w:90,h:60,name:"ANDERSONVILLE",fill:false},
+    // Winnemac Park (large park, north of Foster, between Ashland & Clark)
+    {x:750,y:480,w:180,h:120,name:"WINNEMAC PARK",fill:true},
+    // Welles Park (south, around Sunnyside/Lincoln)
+    {x:880,y:1080,w:100,h:80,name:"WELLES PARK",fill:true},
+    // Swedish American Museum
+    {x:648,y:818,w:44,h:30,name:"SWEDISH\nMUSEUM",fill:false},
+    // Raven Theatre
+    {x:720,y:856,w:48,h:28,name:"RAVEN\nTHEATRE",fill:false},
+    // Bryn Mawr Red Line station
+    {x:547,y:528,w:40,h:24,name:"BRYN MAWR\nCTA",fill:true},
+    // Berwyn Red Line station
+    {x:547,y:628,w:40,h:24,name:"BERWYN\nCTA",fill:true},
+    // Foster Red Line station (approx)
+    {x:547,y:828,w:40,h:24,name:"FOSTER\nCTA",fill:true},
+    // Lawrence Red Line
+    {x:547,y:1028,w:40,h:24,name:"LAWRENCE\nCTA",fill:true},
+  ];
+
   return {streets,labels,landmarks};
 })();
 
@@ -518,10 +594,35 @@ function CityMapLayer({panX,panY}){
   function wx(x){return x+ox;} function wy(y){return y+oy;}
   return(<g style={{pointerEvents:"none"}}>
     <rect x={wx(0)} y={wy(0)} width={1400} height={1680} fill={BG}/>
-    <rect x={wx(200)} y={wy(400)} width={1000} height={900} fill={BG_OUTER} opacity="0.45"/>
-    {streets.map((s,i)=><line key={i} x1={wx(s.x1)} y1={wy(s.y1)} x2={wx(s.x2)} y2={wy(s.y2)} stroke={s.major?INK_MID:INK_LIGHT} strokeWidth={s.major?1.2:0.6} opacity={s.diag?0.35:(s.major?0.5:0.28)}/>)}
-    {landmarks.map((l,i)=><g key={i}><rect x={wx(l.x)} y={wy(l.y)} width={l.w} height={l.h} fill={l.fill?INK_LIGHT:BG} stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.45"/><text x={wx(l.x+l.w/2)} y={wy(l.y+l.h/2+3)} textAnchor="middle" fontSize="5.5" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="0.8" opacity="0.65">{l.name}</text></g>)}
-    {labels.map((l,i)=><text key={i} x={wx(l.x)} y={wy(l.y)} fontSize="5" fontWeight="600" fill={INK_MID} fontFamily={font} letterSpacing="0.6" opacity="0.45" transform={l.horiz?undefined:`rotate(-90,${wx(l.x)},${wy(l.y)})`}>{l.text}</text>)}
+    <rect x={wx(250)} y={wy(350)} width={950} height={1000} fill={BG_OUTER} opacity="0.3"/>
+    {streets.map((s,i)=><line key={i} x1={wx(s.x1)} y1={wy(s.y1)} x2={wx(s.x2)} y2={wy(s.y2)}
+      stroke={s.major?INK_MID:INK_LIGHT}
+      strokeWidth={s.major?1.4:0.6}
+      opacity={s.diag&&s.major?0.7:s.major?0.55:0.3}/>)}
+    {landmarks.map((l,i)=>{
+      var lines=l.name.split("\n");
+      return(<g key={i}>
+        <rect x={wx(l.x)} y={wy(l.y)} width={l.w} height={l.h}
+          fill={l.fill?INK_LIGHT:BG} stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.5"/>
+        {lines.map((line,j)=>(
+          <text key={j} x={wx(l.x+l.w/2)} y={wy(l.y+l.h/2+(j-(lines.length-1)/2)*7)}
+            textAnchor="middle" fontSize="5" fontWeight="700"
+            fill={INK_MID} fontFamily={font} letterSpacing="0.5" opacity="0.7">{line}</text>
+        ))}
+      </g>);
+    })}
+    {labels.map((l,i)=>{
+      if(l.diagonal){
+        return(<text key={i} x={wx(l.x)} y={wy(l.y)}
+          fontSize="5.5" fontWeight="700" fill={INK_MID} fontFamily={font}
+          letterSpacing="0.8" opacity="0.6"
+          transform={`rotate(-73,${wx(l.x)},${wy(l.y)})`}>{l.text}</text>);
+      }
+      return(<text key={i} x={wx(l.x)} y={wy(l.y)}
+        fontSize="5" fontWeight="600" fill={INK_MID} fontFamily={font}
+        letterSpacing="0.6" opacity="0.5"
+        transform={l.horiz?undefined:`rotate(-90,${wx(l.x)},${wy(l.y)})`}>{l.text}</text>);
+    })}
   </g>);
 }
 
