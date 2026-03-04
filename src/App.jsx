@@ -653,6 +653,30 @@ function CreateFlow({onComplete,onCancel}){
   </div>);
 }
 
+function RadiusEdgeLabel({cx,cy,radius,radiusMiles,visibleCount,onReset}){
+  if(!radius)return null;
+  // Label sits just inside the bottom of the ring
+  var labelY=cy+radius-18;
+  // Reset icon sits just inside the top of the ring
+  var resetY=cy-radius+22;
+  var resetX=cx;
+  return(<g style={{pointerEvents:"none"}}>
+    {/* Radius label — bottom inside */}
+    <text x={cx} y={labelY} textAnchor="middle" fontSize="8" fontWeight="700"
+      fill={INK} fontFamily={font} letterSpacing="1.5" opacity="0.75"
+      style={{pointerEvents:"none"}}>
+      {radiusMiles+" MI · "+visibleCount+" VISIBLE"}
+    </text>
+    {/* Reset button — top inside, pointer events on */}
+    <g style={{pointerEvents:"all",cursor:"pointer"}} onClick={onReset}>
+      <circle cx={resetX} cy={resetY} r={10} fill={BG} stroke={INK_LIGHT} strokeWidth="1"/>
+      {/* Circular arrow symbol */}
+      <path d={`M${resetX-4},${resetY} a4,4 0 1,1 5,5`} fill="none" stroke={INK} strokeWidth="1.4" strokeLinecap="round"/>
+      <path d={`M${resetX+1},${resetY+5} l2,1 l-1,-2.5`} fill={INK} stroke="none"/>
+    </g>
+  </g>);
+}
+
 function BottomNav({tab,setTab,currentUser}){
   var tabs=["map","circles","pulse","profile"];
   var [animatingTab,setAnimatingTab]=useState(tab);
@@ -1023,10 +1047,6 @@ export default function App(){
 
       <div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:36}}>
         <span style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Radius</span>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:10,fontWeight:900,color:INK}}>{hasRadius?(radiusMiles+" mi · "+visibleChats.length+" visible"):""}</span>
-          {hasRadius&&<button onClick={resetRadius} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"3px 8px"}}>Redraw</button>}
-        </div>
       </div>
       {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
@@ -1046,6 +1066,7 @@ export default function App(){
             {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
             {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
           </g>)}
+          {hasRadius&&<RadiusEdgeLabel cx={CX} cy={CY} radius={radius} radiusMiles={radiusMiles} visibleCount={visibleChats.length} onReset={resetRadius}/>}
           <g transform={`translate(${panX},${panY})`}>
             {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
             {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
