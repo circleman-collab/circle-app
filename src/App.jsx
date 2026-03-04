@@ -783,7 +783,12 @@ export default function App(){
   function openPulseChat(user){setShowPersonCard(false);setPulseChatUser(user);}
   function closePulseChat(){setPulseChatUser(null);setNearbyUser(null);}
   function handleConnect(){setPulseChatUser(null);setNearbyUser(null);}
-  function openSpontaneousSheet(user,sharedTags){setPulseChatUser(null);setSpontaneousTarget({user,sharedTags});}
+  function openSpontaneousSheet(user,sharedTags){
+    // Blur any focused input first so keyboard starts dismissing
+    if(document.activeElement) document.activeElement.blur();
+    // Wait for iOS keyboard dismiss animation before swapping components
+    setTimeout(()=>{setPulseChatUser(null);setSpontaneousTarget({user,sharedTags});},320);
+  }
   function handleSpontaneousCreate(data){
     var nc=makeCircle({ownerId:currentUser?.id||"user_local",name:data.name,type:"closed",pulseable:false,passphrase:"",dist:0.1,members:2,angle:-20,r:90,tags:data.tags,governance:{mode:"admin",admins:[]},isOwn:true});
     setAllChats(p=>[...p,nc]);setJoinedIds(p=>new Set([...p,nc.id]));
