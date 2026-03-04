@@ -1,13 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
-
-// Renders children into document.body, completely outside the flex layout chain.
-// This prevents iOS Safari from collapsing the app layout during keyboard transitions.
-function Portal({children}){
-  var [el]=useState(()=>document.createElement("div"));
-  useEffect(()=>{document.body.appendChild(el);return()=>document.body.removeChild(el);},[el]);
-  return createPortal(children,el);
-}
 
 const BG="#f0ece3", BG_OUTER="#e8e5de", INK="#0a0a0a", INK_LIGHT="#bfb9ae", INK_MID="#6b6860";
 const font="'Helvetica Neue', Arial, sans-serif";
@@ -70,13 +61,11 @@ function genAvatarParticles(count,size,grand){
   return pts;
 }
 
-// FIX 2: Added flexShrink:0 to SVG style
 function StaticAvatar({tags,size=24,color=INK,bg=BG}){
   var path=genAvatarPath(tags,size),cx=size/2,cy=size/2,strokeW=size*0.032*(0.6+(tags.length/9)*0.5);
-  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{display:"block",flexShrink:0}}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></svg>);
+  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{display:"block"}}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></svg>);
 }
 
-// FIX 3: Added flexShrink:0 to SVG style
 function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,onBurstEnd}){
   var path=genAvatarPath(tags,size),cx=size/2,cy=size/2,n=tags.length;
   var breatheAmp=0.018+(n/9)*0.055,breatheSpeed=0.018+(n/9)*0.014;
@@ -87,7 +76,7 @@ function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,onBurs
   var burstRaf=useRef(null),burstStart=useRef(null),BURST_DUR=grand?1100:620;
   useEffect(()=>{if(!burst)return;setParticles(genAvatarParticles(18,size,grand));setBurstProg(0);setExpand(1);burstStart.current=performance.now();function tick(){var p=Math.min(1,(performance.now()-burstStart.current)/BURST_DUR);setBurstProg(p);if(grand){var ep=p<0.18?p/0.18:1-((p-0.18)/0.82);setExpand(1+ep*0.13);}if(p<1){burstRaf.current=requestAnimationFrame(tick);}else{setParticles(null);setBurstProg(0);setExpand(1);onBurstEnd&&onBurstEnd();}}burstRaf.current=requestAnimationFrame(tick);return()=>cancelAnimationFrame(burstRaf.current);},[burst]);
   var strokeW=size*0.032*(0.6+(n/9)*0.5);
-  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{overflow:"visible",flexShrink:0}}>{grand&&burst&&burstProg>0&&[0,0.15,0.3].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.7));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.36+rp*0.55)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.022} opacity={(1-rp)*0.5} style={{pointerEvents:"none"}}/>;})}{particles&&particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,0.5),lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=cx+Math.cos(p.angle)*p.dist*e+Math.cos(pa)*lat,py=cy+Math.sin(p.angle)*p.dist*e+Math.sin(pa)*lat;return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,grand?0.7:0.9)*(grand?0.95:0.85)} style={{pointerEvents:"none"}}/>;})}<g transform={`translate(${cx},${cy}) scale(${breathe*expand}) translate(${-cx},${-cy})`}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></g></svg>);
+  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{overflow:"visible"}}>{grand&&burst&&burstProg>0&&[0,0.15,0.3].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.7));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.36+rp*0.55)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.022} opacity={(1-rp)*0.5} style={{pointerEvents:"none"}}/>;})}{particles&&particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,0.5),lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=cx+Math.cos(p.angle)*p.dist*e+Math.cos(pa)*lat,py=cy+Math.sin(p.angle)*p.dist*e+Math.sin(pa)*lat;return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,grand?0.7:0.9)*(grand?0.95:0.85)} style={{pointerEvents:"none"}}/>;})}<g transform={`translate(${cx},${cy}) scale(${breathe*expand}) translate(${-cx},${-cy})`}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></g></svg>);
 }
 
 function genCoalesceParticles(count,tx,ty){
@@ -180,7 +169,7 @@ function SpontaneousCircleSheet({currentUser,otherUser,sharedTags,onCreate,onDis
   useEffect(()=>{var t=setTimeout(()=>{setVisible(true);setTimeout(()=>inputRef.current&&inputRef.current.focus(),350);},80);return()=>clearTimeout(t);},[]);
   var tags=sharedTags.length>0?sharedTags:otherUser.tags.slice(0,4);
   function handleCreate(){onCreate({name:circleName.trim()||autoName,tags,type:"closed",governance:{mode:"admin",admins:[]},passphrase:"",pulseable:false});}
-  return(<Portal><div style={{position:"fixed",bottom:0,left:"50%",width:"100%",maxWidth:430,zIndex:200,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
+  return(<div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:200,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)",maxWidth:"100%",overflowX:"hidden"}}>
     <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 32px",boxShadow:"0 -4px 0 "+INK,boxSizing:"border-box"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
         <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Start a Circle</div>
@@ -194,7 +183,7 @@ function SpontaneousCircleSheet({currentUser,otherUser,sharedTags,onCreate,onDis
       </div>)}
       <button onClick={handleCreate} style={{width:"100%",background:INK,color:BG,border:"none",padding:"14px 0",fontFamily:font,fontWeight:700,fontSize:11,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Create Circle →</button>
     </div>
-  </div></Portal>);
+  </div>);
 }
 
 const PULSE_CHAT_LIMIT=7;
@@ -277,7 +266,7 @@ function PulseCheckCard({user,currentUser,onStartPulseChat,onDismiss}){
   var [visible,setVisible]=useState(false);
   useEffect(()=>{var t=setTimeout(()=>setVisible(true),80);return()=>clearTimeout(t);},[]);
   var sharedTags=(currentUser.tags||[]).filter(t=>(user.tags||[]).includes(t));
-  return(<Portal><div style={{position:"fixed",bottom:0,left:"50%",width:"100%",maxWidth:430,zIndex:150,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
+  return(<div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:150,maxWidth:"100%",overflowX:"hidden",transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
     <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>◉ Pulse Check</div>
@@ -291,7 +280,7 @@ function PulseCheckCard({user,currentUser,onStartPulseChat,onDismiss}){
       {sharedTags.length===0&&<div style={{marginBottom:18,fontSize:11,color:INK_MID,fontStyle:"italic"}}>Both open to connection nearby.</div>}
       <button onClick={()=>onStartPulseChat(user)} style={{width:"100%",background:INK,color:BG,border:"none",padding:"14px 0",fontFamily:font,fontWeight:700,fontSize:11,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Start a Pulse Chat →</button>
     </div>
-  </div></Portal>);
+  </div>);
 }
 
 function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
@@ -299,7 +288,7 @@ function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
   useEffect(()=>{var t=setTimeout(()=>setVisible(true),80);return()=>clearTimeout(t);},[]);
   var sharedTags=(currentUser.tags||[]).filter(t=>(circle.tags||[]).includes(t));
   var color=DRAFT_COLORS[Math.abs(tagSeed(circle.tags))%6+1]||INK;
-  return(<Portal><div style={{position:"fixed",bottom:0,left:"50%",width:"100%",maxWidth:430,zIndex:150,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
+  return(<div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:150,maxWidth:"100%",overflowX:"hidden",transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
     <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>◉ Pulse Check — Hidden Circle</div>
@@ -313,13 +302,13 @@ function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
       {sharedTags.length>0&&<div style={{marginBottom:18}}><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:7}}>Matches your interests</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{sharedTags.map(t=><span key={t} style={{fontSize:9,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",background:INK,color:BG,padding:"3px 9px"}}>{t}</span>)}</div></div>}
       <button onClick={()=>onJoin(circle)} style={{width:"100%",background:INK,color:BG,border:"none",padding:"14px 0",fontFamily:font,fontWeight:700,fontSize:11,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Try to Get In →</button>
     </div>
-  </div></Portal>);
+  </div>);
 }
 
 function InterestMatchNotif({circle,sharedTags,onGo,onDismiss}){
   var [visible,setVisible]=useState(false);
   useEffect(()=>{var t=setTimeout(()=>setVisible(true),60);return()=>clearTimeout(t);},[]);
-  return(<Portal><div style={{position:"fixed",top:0,left:"50%",width:"100%",maxWidth:430,zIndex:120,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(-100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
+  return(<div style={{position:"absolute",top:0,left:0,right:0,zIndex:120,maxWidth:"100%",overflowX:"hidden",transform:visible?"translateY(0)":"translateY(-100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
     <div style={{background:BG,borderBottom:"2px solid "+INK,padding:"10px 18px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 3px 0 "+INK_LIGHT}}>
       <div style={{fontSize:12,color:INK_MID,flexShrink:0}}>◉</div>
       <div style={{flex:1,minWidth:0}}>
@@ -329,15 +318,15 @@ function InterestMatchNotif({circle,sharedTags,onGo,onDismiss}){
       <button onClick={onGo} style={{background:"none",border:"1px solid "+INK,color:INK,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"5px 10px",flexShrink:0,minHeight:36}}>Show →</button>
       <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:INK_MID,minWidth:36,minHeight:36,display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>×</button>
     </div>
-  </div></Portal>);
+  </div>);
 }
 
 // ── Status Tab ────────────────────────────────────────────────────────────────
-// FIX 1: Removed the decorative SVG block that was causing iOS Safari layout collapse
 function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
   var [open,setOpen]=useState(false);
   var [customInput,setCustomInput]=useState("");
   var [addingCustom,setAddingCustom]=useState(false);
+  var [dropdownStyle,setDropdownStyle]=useState({position:"absolute",top:"100%",left:0,right:0,zIndex:1000});
   var inputRef=useRef(null),triggerRef=useRef(null);
   var presets=currentUser.statusPresets||DEFAULT_PRESETS;
   var currentStatus=currentUser.status||"";
@@ -345,6 +334,10 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
   useEffect(()=>{
     if(addingCustom&&inputRef.current)inputRef.current.focus();
   },[addingCustom]);
+  useEffect(()=>{
+    if(!open)return;
+    setDropdownStyle({position:"absolute",top:"100%",left:0,right:0,zIndex:1000});
+  },[open]);
 
   function selectPreset(p){
     onUpdateStatus(p);
@@ -388,9 +381,16 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
           borderBottom:"1.5px solid "+(open?INK:INK_LIGHT),
           cursor:"pointer",
           transition:"background 0.15s",
+          position:"relative",
         }}
       >
-        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,pointerEvents:"none",overflow:"hidden"}}>
+          <svg width="100%" height="32" style={{position:"absolute",top:0,left:0}}>
+            <rect x="0" y="0" width="100%" height="32" fill={open?INK:BG}/>
+            <path d="M 0 2 Q 8 0 16 0 L 2000 0 L 2000 32 L 0 32 Z" fill={open?INK:BG}/>
+          </svg>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,position:"relative",zIndex:1,minWidth:0}}>
           <span style={{fontSize:8,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:open?BG:INK_MID,flexShrink:0}}>STATUS</span>
           <span style={{
             fontSize:11,fontStyle:hasStatus?"italic":"italic",
@@ -402,7 +402,7 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
             {hasStatus?`"${displayText}"`:`"${displayText}"`}
           </span>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <div style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:6}}>
           {hasStatus&&!open&&(
             <span onClick={e=>{e.stopPropagation();clearStatus();}} style={{fontSize:12,color:INK_LIGHT,cursor:"pointer",lineHeight:1}}>×</span>
           )}
@@ -412,7 +412,7 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
 
       {open&&(
         <div style={{
-          position:"absolute",top:"100%",left:0,right:0,zIndex:1000,
+          ...dropdownStyle,
           background:BG,border:"1.5px solid "+INK,borderTop:"none",
           boxShadow:"0 4px 0 "+INK_LIGHT,
           maxHeight:280,overflowY:"auto",
@@ -534,7 +534,7 @@ function JoinModal({chat,onClose,onJoined,onRequestSent}){
   function tryPassphrase(){if(!input.trim())return;if(input.trim().toLowerCase()===(chat.passphrase||"").toLowerCase()){setStatus("success");setTimeout(()=>onJoined(chat),900);}else{setStatus("error");setTimeout(()=>setStatus(null),1400);}}
   function submitRequest(){if(!input.trim())return;onRequestSent(chat.id,{id:Math.random().toString(36).slice(2),senderId:"user_local",senderHandle:"@you",message:input.trim(),timestamp:Date.now(),status:"pending"});setStatus("pending");}
   function tryInvite(){if(input.trim().length===6){setStatus("success");setTimeout(()=>onJoined(chat),900);}else{setStatus("error");setTimeout(()=>setStatus(null),1400);}}
-  return(<Portal><div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",background:"rgba(10,10,10,0.45)"}}><div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:390,padding:"28px 24px 36px",boxShadow:"0 -4px 0 "+INK}}>
+  return(<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",background:"rgba(10,10,10,0.45)"}}><div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:390,padding:"28px 24px 36px",boxShadow:"0 -4px 0 "+INK}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}><div><div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:4}}>Hidden Circle</div><div style={{fontSize:20,fontWeight:900,letterSpacing:1,textTransform:"uppercase",color:INK}}>{chat.name||"???"}</div></div><button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>×</button></div>
     {!track&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{fontSize:11,color:INK_MID,marginBottom:8,lineHeight:1.7}}>You've discovered something. How do you want to get in?</div>{[{key:"passphrase",label:"I know the passphrase",icon:"◈"},{key:"request",label:"Request access",icon:"◎"},{key:"invite",label:"I have an invite code",icon:"◉"}].map(opt=>(<div key={opt.key} onClick={()=>{setTrack(opt.key);setInput("");setStatus(null);}} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",border:"2px solid "+INK_LIGHT,cursor:"pointer"}}><span style={{fontSize:16,color}}>{opt.icon}</span><span style={{fontWeight:700,fontSize:12,color:INK,letterSpacing:.5}}>{opt.label}</span></div>))}</div>)}
     {track==="passphrase"&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:18}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Enter the passphrase</div><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryPassphrase();}} placeholder="speak the words..." style={{...ii,fontStyle:"italic"}} autoFocus/>{status==="error"&&<div style={{fontSize:10,color:"#7a3a3a",fontWeight:700,letterSpacing:1}}>Wrong passphrase. Try again.</div>}<div style={{display:"flex",gap:10}}><button onClick={()=>setTrack(null)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={tryPassphrase} style={{...bb,flex:2,background:INK,color:BG}}>Enter →</button></div></div>)}
@@ -542,7 +542,7 @@ function JoinModal({chat,onClose,onJoined,onRequestSent}){
     {track==="request"&&status==="pending"&&(<div style={{display:"flex",flexDirection:"column",gap:14,alignItems:"center",padding:"12px 0"}}><div style={{fontSize:24,opacity:.3}}>◎</div><div style={{fontSize:11,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,textAlign:"center"}}>Request Sent</div><div style={{fontSize:11,color:INK_MID,textAlign:"center",lineHeight:1.8,maxWidth:240}}>{chat.governance?.mode==="democracy"?"The circle will vote on your request.":"An admin will review your request."}</div><button onClick={onClose} style={{...bb,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID,marginTop:8}}>Close</button></div>)}
     {track==="invite"&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:18}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Invite code</div><input value={input} onChange={e=>setInput(e.target.value.toUpperCase().slice(0,6))} onKeyDown={e=>{if(e.key==="Enter")tryInvite();}} placeholder="XXXXXX" style={{...ii,letterSpacing:6,fontSize:22,fontWeight:900}} autoFocus/>{status==="error"&&<div style={{fontSize:10,color:"#7a3a3a",fontWeight:700,letterSpacing:1}}>Invalid code.</div>}<div style={{display:"flex",gap:10}}><button onClick={()=>setTrack(null)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={tryInvite} style={{...bb,flex:2,background:input.length===6?INK:"none",color:input.length===6?BG:INK_LIGHT,border:"2px solid "+(input.length===6?INK:INK_LIGHT)}}>Verify →</button></div></div>)}
     {status==="success"&&(<div style={{display:"flex",flexDirection:"column",gap:14,alignItems:"center",padding:"12px 0"}}><div style={{fontSize:28}}>◉</div><div style={{fontSize:11,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK,textAlign:"center"}}>You're in</div><div style={{fontSize:11,color:INK_MID,textAlign:"center"}}>Welcome to the circle.</div></div>)}
-  </div></div></Portal>);
+  </div></div>);
 }
 
 function PulseParticles({progress,tx,ty,fired,particles}){if(!particles||progress<=0)return null;var BTN_R=64;return <g>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=fired?Math.pow(lp,.55):1-Math.pow(1-lp,.7);var dist=fired?e*BTN_R*4.2:p.dist*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=tx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,py=ty+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var op=fired?Math.pow(1-e,.8)*.8:(.2+e*.8);var sz=fired?p.size*(1-e*.6):p.size*(.3+e*.7);return <circle key={i} cx={px} cy={py} r={Math.max(.1,sz)} fill={INK} opacity={op} style={{pointerEvents:"none"}}/>;})}</g>;}
@@ -612,6 +612,7 @@ function CreateFlow({onComplete,onCancel}){
   function removeTag(t){setTags(p=>p.filter(x=>x!==t));}
   function handleCreate(){if(!canCreate)return;var start=Date.now();function anim(){var p=Math.min(1,(Date.now()-start)/500);setConfirming(p);if(p<1){confirmRaf.current=requestAnimationFrame(anim);}else{onComplete({name:name.trim(),type:ctype,pulseable,tags,passphrase:passphrase.trim(),governance:{mode:govMode,admins:adminsInput.split(",").map(s=>s.trim()).filter(Boolean)}});}}confirmRaf.current=requestAnimationFrame(anim);}
   var canNext1=name.trim().length>=2,canNext2=ctype!==null,canNext3=tags.length>=3,canCreate=canNext3;
+  // Correct: fire handleCreate via effect, not during render (avoids double-invoke in StrictMode)
   useEffect(()=>{if(step===99)handleCreate();},[step]); // eslint-disable-line react-hooks/exhaustive-deps
   var totalSteps=ctype==="hidden"?5:4;
   var typeOptions=[{key:"open",label:"Open",desc:"Anyone nearby can join"},{key:"closed",label:"Closed",desc:"Invite only"},{key:"hidden",label:"Hidden",desc:"Discovered via Pulse"}];
@@ -624,10 +625,12 @@ function CreateFlow({onComplete,onCancel}){
     {step===3&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:20}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Tag it</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Min 3, max 6.</div></div><div style={{minHeight:80,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",padding:"12px 0"}}>{tags.map(t=><FloatingTag key={t} tag={t} confirming={confirming} onRemove={removeTag}/>)}{tags.length===0&&<span style={{fontSize:10,color:INK_LIGHT,fontStyle:"italic"}}>Tags will float here</span>}</div>{tags.length<6&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={inputRef} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{...ii,fontSize:16,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput)} style={{background:INK,color:BG,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}<div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Suggestions</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{TAG_SUGGESTIONS.filter(s=>!tags.includes(s)).slice(0,8).map(s=><div key={s} onClick={()=>addTag(s)} style={{border:"1px dashed "+INK_LIGHT,padding:"8px 12px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",color:INK_MID,minHeight:36,display:"inline-flex",alignItems:"center"}}>{s}</div>)}</div></div><div style={{fontSize:9,color:INK_MID}}>{tags.length}/6 · {Math.max(0,3-tags.length)} more needed</div><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(2)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext3)setStep(4);}} style={{...bb,flex:2,background:canNext3?INK:"none",color:canNext3?BG:INK_LIGHT,border:"2px solid "+(canNext3?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
     {step===4&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Governance</div><div style={{display:"flex",border:"2px solid "+INK}}>{[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"12px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><FistIcon size={11} color={sel?BG:INK}/> Democracy</span>:"Admin Rule"}</button>);})}</div><div style={{fontSize:10,color:INK_MID,lineHeight:1.7}}>{govMode==="admin"?"Admins approve requests.":"Members vote. Majority rules."}</div><input value={adminsInput} onChange={e=>setAdminsInput(e.target.value)} placeholder="@handle, @handle..." style={{...ii,fontSize:16,padding:"6px 0"}}/><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(3)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(ctype==="hidden"?5:99)} style={{...bb,flex:2,background:INK,color:BG}}>{ctype==="hidden"?"Continue →":"Plant Circle"}</button></div></div>)}
     {step===5&&ctype==="hidden"&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:28}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Set the passphrase</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Optional. A secret phrase to enter.</div></div><input ref={inputRef} value={passphrase} onChange={e=>setPassphrase(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")handleCreate();}} placeholder="velvet fog..." maxLength={48} style={{...ii,fontSize:18,fontWeight:700,fontStyle:"italic",padding:"8px 0"}}/><div style={{display:"flex",gap:10}}><button onClick={()=>setStep(4)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={handleCreate} style={{...bb,flex:2,background:INK,color:BG}}>Plant Circle</button></div></div>)}
+    {/* step 99 handled by useEffect above */}
   </div>);
 }
 
 export default function App(){
+  // Inject once: kill iOS tap-highlight and text-selection on all interactive elements
   useEffect(()=>{
     var s=document.createElement("style");
     s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;}";
@@ -640,7 +643,7 @@ export default function App(){
   var [drawPhase,setDrawPhase]=useState("idle");
   var [drawPath,setDrawPath]=useState([]);
   var [liveRadius,setLiveRadius]=useState(0);
-  var [circleScale,setCircleScale]=useState(1);
+  var [circleScale,setCircleScale]=useState(1); // NEW: for animate-in on radius reveal
   var [selectedChat,setSelectedChat]=useState(null);
   var [joinTarget,setJoinTarget]=useState(null);
   var [msgInput,setMsgInput]=useState("");
@@ -689,7 +692,7 @@ export default function App(){
   var nearbyCircleRaf=useRef(null),nearbyCircleStart=useRef(null);
   var NEARBY_DUR=4200;
   var svgRef=useRef(null),dragging=useRef(false);
-  var svgRectCache=useRef(null);
+  var svgRectCache=useRef(null); // cached on gesture start; invalidated on gesture end to avoid stale rect after resize/orientation change
   var plantHoldActive=useRef(false),plantHoldStart=useRef(null);
   var plantHoldProgressRef=useRef(0),plantStampProgressRef=useRef(0),plantPosRef=useRef(null);
   var pulseHoldStart=useRef(null),pulseHoldRaf=useRef(null);
@@ -810,8 +813,13 @@ export default function App(){
 
   function toSVG(cx,cy){if(!svgRef.current)return{x:0,y:0};var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();return{x:(cx-rect.left)*(350/rect.width),y:(cy-rect.top)*(420/rect.height)};}
 
+  // CHANGED: onDrawStart - just start fresh, no circle yet
   const onDrawStart=useCallback((e)=>{e.preventDefault();if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();setDrawPhase("drawing");setDrawPath([]);setLiveRadius(0);},[]);
+
+  // CHANGED: onDrawMove - track path only, no live circle preview
   const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
+
+  // CHANGED: onDrawEnd - fit circle from avg distance, then animate it in
   const onDrawEnd=useCallback(()=>{
     setDrawPhase("done");
     setDrawPath(path=>{
@@ -841,6 +849,7 @@ export default function App(){
   const onMapMove=useCallback((e)=>{if(drawPhase==="drawing"){onDrawMove(e);return;}if(dragging.current&&svgRef.current){var c=e.touches?e.touches[0]:e;var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));}},[ drawPhase,onDrawMove]);
   const onMapUp=useCallback(()=>{svgRectCache.current=null;if(drawPhase==="drawing"){onDrawEnd();return;}dragging.current=false;cancelPlantHold();},[drawPhase,onDrawEnd,cancelPlantHold]);
 
+  // CHANGED: resetRadius also resets circleScale
   function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);}
 
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
@@ -856,10 +865,11 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100vh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%"};
-  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:430,flex:1,display:"flex",flexDirection:"column",position:"relative"};
+  var outerShell={background:BG_OUTER,minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%"};
+  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:430,flex:1,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"};
 
   if(!currentUser)return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
+
 
   var visibleChats=radius?allChats.filter(c=>c.r<=radius&&c.type!=="hidden"):[];
   var radiusMiles=radius?((radius/MAX_R)*2).toFixed(1):"—";
@@ -877,6 +887,8 @@ export default function App(){
   var msgs=liveChat?liveChat.msgs||[]:[];
   var chatColor=selectedChat?(DRAFT_COLORS[selectedChat.id]||INK):INK;
   var isDemo=selectedChat?.governance?.mode==="democracy";
+
+  // creating handled inline in main return below
 
   return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}>
     {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
@@ -924,6 +936,7 @@ export default function App(){
       <div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:36}}>
         <span style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Radius</span>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
+          {/* CHANGED: removed live radius display during drawing since we no longer track liveRadius */}
           <span style={{fontSize:10,fontWeight:900,color:INK}}>{hasRadius?(radiusMiles+" mi · "+visibleChats.length+" visible"):""}</span>
           {hasRadius&&<button onClick={resetRadius} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"3px 8px"}}>Redraw</button>}
         </div>
@@ -936,6 +949,7 @@ export default function App(){
           <rect x="0" y="0" width="350" height="420" fill={BG}/>
           {[70,130,190,250].map(r=><circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={INK_LIGHT} strokeWidth="0.8"/>)}
           {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
+          {/* CHANGED: show freehand path during drawing only, no wobbly circle preview */}
           {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7"/>}
           {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
             <path d={wobblyPath(CX,CY,radius,3.7)} fill={INK} fillOpacity="0.04"/>
