@@ -180,8 +180,8 @@ function SpontaneousCircleSheet({currentUser,otherUser,sharedTags,onCreate,onDis
   useEffect(()=>{var t=setTimeout(()=>{setVisible(true);setTimeout(()=>inputRef.current&&inputRef.current.focus(),350);},80);return()=>clearTimeout(t);},[]);
   var tags=sharedTags.length>0?sharedTags:otherUser.tags.slice(0,4);
   function handleCreate(){onCreate({name:circleName.trim()||autoName,tags,type:"closed",governance:{mode:"admin",admins:[]},passphrase:"",pulseable:false});}
-  return(<Portal><div style={{position:"fixed",bottom:0,left:"50%",width:"100%",maxWidth:430,zIndex:200,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 32px",boxShadow:"0 -4px 0 "+INK,boxSizing:"border-box"}}>
+  return(<Portal><div style={{position:"fixed",bottom:0,left:0,width:"100vw",zIndex:200,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
+    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 32px",boxShadow:"0 -4px 0 "+INK,boxSizing:"border-box",maxWidth:430,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
         <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Start a Circle</div>
         <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:0}}>×</button>
@@ -277,8 +277,8 @@ function PulseCheckCard({user,currentUser,onStartPulseChat,onDismiss}){
   var [visible,setVisible]=useState(false);
   useEffect(()=>{var t=setTimeout(()=>setVisible(true),80);return()=>clearTimeout(t);},[]);
   var sharedTags=(currentUser.tags||[]).filter(t=>(user.tags||[]).includes(t));
-  return(<Portal><div style={{position:"fixed",bottom:0,left:"50%",width:"100%",maxWidth:430,zIndex:150,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK}}>
+  return(<Portal><div style={{position:"fixed",bottom:0,left:0,width:"100vw",zIndex:150,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
+    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK,maxWidth:430,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>◉ Pulse Check</div>
         <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:0}}>×</button>
@@ -299,8 +299,8 @@ function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
   useEffect(()=>{var t=setTimeout(()=>setVisible(true),80);return()=>clearTimeout(t);},[]);
   var sharedTags=(currentUser.tags||[]).filter(t=>(circle.tags||[]).includes(t));
   var color=DRAFT_COLORS[Math.abs(tagSeed(circle.tags))%6+1]||INK;
-  return(<Portal><div style={{position:"fixed",bottom:0,left:"50%",width:"100%",maxWidth:430,zIndex:150,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK}}>
+  return(<Portal><div style={{position:"fixed",bottom:0,left:0,width:"100vw",zIndex:150,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
+    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK,maxWidth:430,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
         <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>◉ Pulse Check — Hidden Circle</div>
         <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:0}}>×</button>
@@ -319,8 +319,8 @@ function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
 function InterestMatchNotif({circle,sharedTags,onGo,onDismiss}){
   var [visible,setVisible]=useState(false);
   useEffect(()=>{var t=setTimeout(()=>setVisible(true),60);return()=>clearTimeout(t);},[]);
-  return(<Portal><div style={{position:"fixed",top:0,left:"50%",width:"100%",maxWidth:430,zIndex:120,transform:visible?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(-100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,borderBottom:"2px solid "+INK,padding:"10px 18px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 3px 0 "+INK_LIGHT}}>
+  return(<Portal><div style={{position:"fixed",top:0,left:0,width:"100vw",zIndex:120,transform:visible?"translateY(0)":"translateY(-100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
+    <div style={{background:BG,borderBottom:"2px solid "+INK,padding:"10px 18px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 3px 0 "+INK_LIGHT,maxWidth:430,margin:"0 auto"}}>
       <div style={{fontSize:12,color:INK_MID,flexShrink:0}}>◉</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:10,fontWeight:700,color:INK,letterSpacing:.3}}>{circle.name}</div>
@@ -783,7 +783,12 @@ export default function App(){
   function openPulseChat(user){setShowPersonCard(false);setPulseChatUser(user);}
   function closePulseChat(){setPulseChatUser(null);setNearbyUser(null);}
   function handleConnect(){setPulseChatUser(null);setNearbyUser(null);}
-  function openSpontaneousSheet(user,sharedTags){setPulseChatUser(null);setSpontaneousTarget({user,sharedTags});}
+  function openSpontaneousSheet(user,sharedTags){
+    // Blur any focused input first so keyboard starts dismissing
+    if(document.activeElement) document.activeElement.blur();
+    // Wait for iOS keyboard dismiss animation before swapping components
+    setTimeout(()=>{setPulseChatUser(null);setSpontaneousTarget({user,sharedTags});},500);
+  }
   function handleSpontaneousCreate(data){
     var nc=makeCircle({ownerId:currentUser?.id||"user_local",name:data.name,type:"closed",pulseable:false,passphrase:"",dist:0.1,members:2,angle:-20,r:90,tags:data.tags,governance:{mode:"admin",admins:[]},isOwn:true});
     setAllChats(p=>[...p,nc]);setJoinedIds(p=>new Set([...p,nc.id]));
@@ -857,7 +862,7 @@ export default function App(){
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
   var outerShell={background:BG_OUTER,minHeight:"100%",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%",flex:1};
-  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:430,flex:1,display:"flex",flexDirection:"column",position:"relative"};
+  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:430,flex:1,display:"flex",flexDirection:"column",position:"relative",boxSizing:"border-box"};
 
   if(!currentUser)return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
