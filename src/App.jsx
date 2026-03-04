@@ -627,6 +627,58 @@ function CreateFlow({onComplete,onCancel}){
   </div>);
 }
 
+function BottomNav({tab,setTab,currentUser}){
+  var tabs=["map","circles","pulse","profile"];
+  var [animatingTab,setAnimatingTab]=useState(tab);
+  var [labelOpacity,setLabelOpacity]=useState(1);
+  var rafRef=useRef(null);
+  useEffect(()=>{
+    setLabelOpacity(0);
+    var timer=setTimeout(()=>{
+      setAnimatingTab(tab);
+      var start=performance.now();
+      function fadeIn(){var p=Math.min(1,(performance.now()-start)/180);setLabelOpacity(p);if(p<1)rafRef.current=requestAnimationFrame(fadeIn);}
+      rafRef.current=requestAnimationFrame(fadeIn);
+    },90);
+    return()=>{clearTimeout(timer);cancelAnimationFrame(rafRef.current);};
+  },[tab]);
+  function getIcon(name,active){
+    var color=active?BG:INK_MID;
+    if(name==="map")return(<svg width={20} height={20} viewBox="0 0 20 20"><circle cx={10} cy={10} r={8} fill={active?BG:INK}/><circle cx={10} cy={10} r={3} fill={active?INK:BG}/></svg>);
+    if(name==="circles")return <span style={{fontSize:18,color,lineHeight:1}}>◈</span>;
+    if(name==="pulse")return <span style={{fontSize:18,color,lineHeight:1}}>◉</span>;
+    if(name==="profile")return <StaticAvatar tags={currentUser?.tags||[]} size={26} color={color} bg={active?INK:BG}/>;
+    return null;
+  }
+  return(
+    <div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
+      {tabs.map((name,i)=>{
+        var active=tab===name;
+        return(
+          <button key={name} onClick={()=>setTab(name)} style={{
+            flex:1,minHeight:62,background:active?INK:BG,
+            border:"none",borderRight:i<3?"1px solid "+(active?INK:INK_LIGHT):"none",
+            fontFamily:font,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            transition:"background 0.18s",
+          }}>
+            {active?(
+              <span style={{
+                fontSize:9,fontWeight:900,letterSpacing:2.5,
+                textTransform:"uppercase",color:BG,
+                opacity:animatingTab===name?labelOpacity:0,
+                transition:"opacity 0.09s",userSelect:"none",
+              }}>{name}</span>
+            ):(
+              getIcon(name,false)
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
@@ -919,10 +971,6 @@ export default function App(){
       </div>
     </div>
 
-    <div style={{display:"flex",borderBottom:"2px solid "+INK}}>
-      {["map","circles","pulse","profile"].map((t,i)=><button key={t} onClick={()=>setTab(t)} style={{flex:1,minHeight:44,background:tab===t?INK:"none",color:tab===t?BG:INK,border:"none",borderRight:i<3?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>{t}</button>)}
-    </div>
-
     {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
       <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
 
@@ -1056,17 +1104,7 @@ export default function App(){
       </div>
     </div>)}
 
-    <div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
-      {["map","circles","pulse","profile"].map((name,i)=>{
-        var active=tab===name,bg2=active?INK:BG,fg=active?BG:INK;
-        var icon;
-        if(name==="map")icon=<svg width={18} height={18} viewBox="0 0 18 18"><circle cx={9} cy={9} r={8} fill={active?BG:INK}/><circle cx={9} cy={9} r={3} fill={active?INK:BG}/></svg>;
-        else if(name==="circles")icon=<span style={{fontSize:18,color:fg,lineHeight:1}}>◈</span>;
-        else if(name==="pulse")icon=<span style={{fontSize:18,color:fg,lineHeight:1}}>◉</span>;
-        else icon=<StaticAvatar tags={currentUser.tags} size={28} color={fg} bg={bg2}/>;
-        return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:54,background:bg2,border:"none",borderRight:i<3?"1px solid "+INK_LIGHT:"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{icon}</button>);
-      })}
-    </div>
+    <BottomNav tab={tab} setTab={setTab} currentUser={currentUser}/>
     </>}
   </div></div>);
 }
