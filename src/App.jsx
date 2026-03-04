@@ -499,104 +499,6 @@ const INIT_CHATS=[
 ];
 
 function wobblyPath(cx,cy,r,seed,steps,amp){steps=steps||120;amp=amp||2.2;var d="";for(var i=0;i<=steps;i++){var t=(i/steps)*Math.PI*2;var wr=r+amp*Math.sin(t*5+seed)+amp*0.4*Math.sin(t*11+seed*0.9);d+=(i===0?"M ":"L ")+(cx+wr*Math.cos(t-Math.PI/2))+" "+(cy+wr*Math.sin(t-Math.PI/2))+" ";}return d+"Z";}
-
-// ── City Map ──────────────────────────────────────────────────────────────────
-// Isolated component — swap for Mapbox later by replacing only this block.
-// Renders an ink/newsprint-style SVG street grid.
-// World space: 1400×1680 px. User is at world (700,840) → SVG viewport (175,210).
-// panX/panY shift the world; CityMapLayer receives those directly.
-
-const CITY_BLOCKS = (() => {
-  var streets = [], labels = [];
-  var hStreets = [
-    {y:480,name:"ELM ST",major:true},
-    {y:540,name:"",major:false},
-    {y:600,name:"OAK AVE",major:false},
-    {y:660,name:"",major:false},
-    {y:720,name:"MAPLE DR",major:true},
-    {y:780,name:"",major:false},
-    {y:840,name:"MAIN ST",major:true},
-    {y:900,name:"",major:false},
-    {y:960,name:"PINE RD",major:true},
-    {y:1020,name:"",major:false},
-    {y:1080,name:"CEDAR BLVD",major:false},
-    {y:1140,name:"",major:false},
-    {y:1200,name:"ASH ST",major:true},
-  ];
-  var vStreets = [
-    {x:340,name:"1ST AVE",major:false},
-    {x:420,name:"",major:false},
-    {x:500,name:"RIVER RD",major:true},
-    {x:560,name:"",major:false},
-    {x:620,name:"MILL ST",major:false},
-    {x:700,name:"CENTER AVE",major:true},
-    {x:780,name:"",major:false},
-    {x:840,name:"PARK BLVD",major:true},
-    {x:900,name:"",major:false},
-    {x:980,name:"GROVE ST",major:false},
-    {x:1060,name:"",major:false},
-  ];
-  hStreets.forEach(s=>{
-    streets.push({x1:200,y1:s.y,x2:1200,y2:s.y,major:s.major});
-    if(s.name)labels.push({x:212,y:s.y-3,text:s.name,horiz:true});
-  });
-  vStreets.forEach(s=>{
-    streets.push({x1:s.x,y1:360,x2:s.x,y2:1320,major:s.major,vert:true});
-    if(s.name)labels.push({x:s.x,y:372,text:s.name,horiz:false});
-  });
-  // diagonal streets for character
-  streets.push({x1:340,y1:480,x2:500,y2:660,diag:true});
-  streets.push({x1:900,y1:840,x2:1060,y2:660,diag:true});
-  var landmarks = [
-    {x:512,y:852,w:76,h:56,name:"PARK",fill:true},
-    {x:622,y:762,w:56,h:48,name:"MARKET",fill:false},
-    {x:712,y:662,w:88,h:44,name:"LIBRARY",fill:false},
-    {x:812,y:862,w:64,h:52,name:"STATION",fill:true},
-    {x:432,y:692,w:52,h:40,name:"GALLERY",fill:false},
-    {x:730,y:960,w:70,h:50,name:"PLAZA",fill:true},
-  ];
-  return {streets,labels,landmarks};
-})();
-
-function CityMapLayer({panX,panY}){
-  var {streets,labels,landmarks}=CITY_BLOCKS;
-  // World origin (700,840) maps to SVG (175,210). Add pan on top.
-  var ox=175-700+panX, oy=210-840+panY;
-  function wx(x){return x+ox;} function wy(y){return y+oy;}
-  return(
-    <g style={{pointerEvents:"none"}}>
-      {/* Large BG fill — oversized so panning never shows a gap */}
-      <rect x={wx(0)} y={wy(0)} width={1400} height={1680} fill={BG}/>
-      <rect x={wx(200)} y={wy(400)} width={1000} height={900} fill={BG_OUTER} opacity="0.45"/>
-      {streets.map((s,i)=>(
-        <line key={i} x1={wx(s.x1)} y1={wy(s.y1)} x2={wx(s.x2)} y2={wy(s.y2)}
-          stroke={s.major?INK_MID:INK_LIGHT}
-          strokeWidth={s.major?1.2:0.6}
-          opacity={s.diag?0.35:(s.major?0.5:0.28)}/>
-      ))}
-      {landmarks.map((l,i)=>(
-        <g key={i}>
-          <rect x={wx(l.x)} y={wy(l.y)} width={l.w} height={l.h}
-            fill={l.fill?INK_LIGHT:BG} stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.45"/>
-          <text x={wx(l.x+l.w/2)} y={wy(l.y+l.h/2+3)}
-            textAnchor="middle" fontSize="5.5" fontWeight="700"
-            fill={INK_MID} fontFamily={font} letterSpacing="0.8" opacity="0.65">
-            {l.name}
-          </text>
-        </g>
-      ))}
-      {labels.map((l,i)=>(
-        <text key={i} x={wx(l.x)} y={wy(l.y)}
-          fontSize="5" fontWeight="600" fill={INK_MID}
-          fontFamily={font} letterSpacing="0.6" opacity="0.45"
-          transform={l.horiz?undefined:`rotate(-90,${wx(l.x)},${wy(l.y)})`}>
-          {l.text}
-        </text>
-      ))}
-    </g>
-  );
-}
-
 function genPulseParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.55;p.push({angle:a,dist:55+Math.random()*110,size:0.8+Math.random()*2.8,delay:Math.random()*.28,drift:(Math.random()-.5)*4.5,driftFreq:1.2+Math.random()*3.5});}return p;}
 function genOutwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.25;p.push({angle:a,travelMult:1.1+Math.random()*1.8,size:.8+Math.random()*2.2,delay:Math.random()*.22,drift:(Math.random()-.5)*3.5,driftFreq:1.5+Math.random()*3,brightness:.4+Math.random()*.6});}return p;}
 function genInwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.4;p.push({angle:a,spawnMult:1.3+Math.random()*1.4,size:.8+Math.random()*1.8,delay:Math.random()*.28,drift:(Math.random()-.5)*2.8,driftFreq:1.5+Math.random()*2.5,brightness:.35+Math.random()*.65});}return p;}
@@ -725,6 +627,58 @@ function CreateFlow({onComplete,onCancel}){
   </div>);
 }
 
+function BottomNav({tab,setTab,currentUser}){
+  var tabs=["map","circles","pulse","profile"];
+  var [animatingTab,setAnimatingTab]=useState(tab);
+  var [labelOpacity,setLabelOpacity]=useState(1);
+  var rafRef=useRef(null);
+  useEffect(()=>{
+    setLabelOpacity(0);
+    var timer=setTimeout(()=>{
+      setAnimatingTab(tab);
+      var start=performance.now();
+      function fadeIn(){var p=Math.min(1,(performance.now()-start)/180);setLabelOpacity(p);if(p<1)rafRef.current=requestAnimationFrame(fadeIn);}
+      rafRef.current=requestAnimationFrame(fadeIn);
+    },90);
+    return()=>{clearTimeout(timer);cancelAnimationFrame(rafRef.current);};
+  },[tab]);
+  function getIcon(name,active){
+    var color=active?BG:INK_MID;
+    if(name==="map")return(<svg width={20} height={20} viewBox="0 0 20 20"><circle cx={10} cy={10} r={8} fill={active?BG:INK}/><circle cx={10} cy={10} r={3} fill={active?INK:BG}/></svg>);
+    if(name==="circles")return <span style={{fontSize:18,color,lineHeight:1}}>◈</span>;
+    if(name==="pulse")return <span style={{fontSize:18,color,lineHeight:1}}>◉</span>;
+    if(name==="profile")return <StaticAvatar tags={currentUser?.tags||[]} size={26} color={color} bg={active?INK:BG}/>;
+    return null;
+  }
+  return(
+    <div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
+      {tabs.map((name,i)=>{
+        var active=tab===name;
+        return(
+          <button key={name} onClick={()=>setTab(name)} style={{
+            flex:1,minHeight:62,background:active?INK:BG,
+            border:"none",borderRight:i<3?"1px solid "+(active?INK:INK_LIGHT):"none",
+            fontFamily:font,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",
+            transition:"background 0.18s",
+          }}>
+            {active?(
+              <span style={{
+                fontSize:9,fontWeight:900,letterSpacing:2.5,
+                textTransform:"uppercase",color:BG,
+                opacity:animatingTab===name?labelOpacity:0,
+                transition:"opacity 0.09s",userSelect:"none",
+              }}>{name}</span>
+            ):(
+              getIcon(name,false)
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
@@ -781,8 +735,6 @@ export default function App(){
   var [highlightedCircleId,setHighlightedCircleId]=useState(null);
   var [bumpActive,setBumpActive]=useState(false);
   var [bumpPulse,setBumpPulse]=useState(1);
-  var [panX,setPanX]=useState(0);
-  var [panY,setPanY]=useState(0);
 
   var bumpRaf=useRef(null),bumpT=useRef(0);
   var nearbyPersonRaf=useRef(null),nearbyPersonStart=useRef(null);
@@ -790,9 +742,6 @@ export default function App(){
   var NEARBY_DUR=4200;
   var svgRef=useRef(null),dragging=useRef(false);
   var svgRectCache=useRef(null);
-  var isPanning=useRef(false),panOrigin=useRef(null);
-  // Track how far finger has moved since touchstart — used to cancel plant-hold on pan
-  var panMoveTotal=useRef(0);
   var plantHoldActive=useRef(false),plantHoldStart=useRef(null);
   var plantHoldProgressRef=useRef(0),plantStampProgressRef=useRef(0),plantPosRef=useRef(null);
   var pulseHoldStart=useRef(null),pulseHoldRaf=useRef(null);
@@ -945,66 +894,11 @@ export default function App(){
 
   const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(22));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
-  const onMapDown=useCallback((e)=>{
-    if(drawPhase==="idle"){onDrawStart(e);return;}
-    if(drawPhase==="drawing")return;
-    if(drawPhase==="done"){
-      var c=e.touches?e.touches[0]:e;
-      // Cache rect now — used for both toSVG and pan scale during this gesture
-      if(svgRef.current) svgRectCache.current=svgRef.current.getBoundingClientRect();
-      var pos=toSVG(c.clientX,c.clientY);
-      // Start tracking for pan vs plant-hold disambiguation
-      panMoveTotal.current=0;
-      isPanning.current=false;
-      // Store rect.width at gesture start so we don't re-query during move
-      var rectW=svgRectCache.current?svgRectCache.current.width:350;
-      panOrigin.current={clientX:c.clientX,clientY:c.clientY,px:panX,py:panY,scale:350/rectW};
-      // Convert screen pos → world pos (subtract pan) so plantPos renders correctly
-      // inside the <g transform="translate(panX,panY)"> group
-      startPlantHold({x:pos.x-panX,y:pos.y-panY});
-    }
-  },[drawPhase,onDrawStart,startPlantHold,panX,panY]);
+  const onMapDown=useCallback((e)=>{if(drawPhase==="idle"){onDrawStart(e);return;}if(drawPhase==="drawing")return;if(drawPhase==="done"){var c=e.touches?e.touches[0]:e;startPlantHold(toSVG(c.clientX,c.clientY));}},[drawPhase,onDrawStart,startPlantHold]);
+  const onMapMove=useCallback((e)=>{if(drawPhase==="drawing"){onDrawMove(e);return;}if(dragging.current&&svgRef.current){var c=e.touches?e.touches[0]:e;var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));}},[ drawPhase,onDrawMove]);
+  const onMapUp=useCallback(()=>{svgRectCache.current=null;if(drawPhase==="drawing"){onDrawEnd();return;}dragging.current=false;cancelPlantHold();},[drawPhase,onDrawEnd,cancelPlantHold]);
 
-  const onMapMove=useCallback((e)=>{
-    if(drawPhase==="drawing"){onDrawMove(e);return;}
-    var c=e.touches?e.touches[0]:e;
-    // Lens ring resize
-    if(dragging.current&&svgRef.current){
-      e.preventDefault();
-      var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();
-      var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
-      setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
-      return;
-    }
-    // Pan (done phase only)
-    if(drawPhase==="done"&&panOrigin.current){
-      var dx2=c.clientX-panOrigin.current.clientX, dy2=c.clientY-panOrigin.current.clientY;
-      var moved=Math.sqrt(dx2*dx2+dy2*dy2);
-      panMoveTotal.current=moved;
-      // Once finger has moved 6px, commit to pan and cancel plant-hold
-      if(!isPanning.current&&moved>6){
-        isPanning.current=true;
-        cancelPlantHold();
-      }
-      if(isPanning.current){
-        e.preventDefault();
-        var scale=panOrigin.current.scale||1;
-        setPanX(panOrigin.current.px+dx2*scale);
-        setPanY(panOrigin.current.py+dy2*scale);
-      }
-    }
-  },[drawPhase,onDrawMove,cancelPlantHold]);
-
-  const onMapUp=useCallback(()=>{
-    svgRectCache.current=null;
-    if(drawPhase==="drawing"){onDrawEnd();return;}
-    dragging.current=false;
-    if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
-    panOrigin.current=null;
-    cancelPlantHold();
-  },[drawPhase,onDrawEnd,cancelPlantHold]);
-
-  function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);setPanX(0);setPanY(0);}
+  function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);}
 
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
@@ -1077,10 +971,6 @@ export default function App(){
       </div>
     </div>
 
-    <div style={{display:"flex",borderBottom:"2px solid "+INK}}>
-      {["map","circles","pulse","profile"].map((t,i)=><button key={t} onClick={()=>setTab(t)} style={{flex:1,minHeight:44,background:tab===t?INK:"none",color:tab===t?BG:INK,border:"none",borderRight:i<3?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>{t}</button>)}
-    </div>
-
     {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
       <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
 
@@ -1096,9 +986,8 @@ export default function App(){
         <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
           onMouseDown={onMapDown} onMouseMove={onMapMove} onMouseUp={onMapUp}
           onTouchStart={onMapDown} onTouchMove={onMapMove} onTouchEnd={onMapUp}>
-          {/* City map layer — scrolls with pan, sits behind everything */}
-          <CityMapLayer panX={panX} panY={panY}/>
-          {[70,130,190,250].map(r=><circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.35"/>)}
+          <rect x="0" y="0" width="350" height="420" fill={BG}/>
+          {[70,130,190,250].map(r=><circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={INK_LIGHT} strokeWidth="0.8"/>)}
           {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
           {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7"/>}
           {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
@@ -1110,32 +999,19 @@ export default function App(){
             {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
             {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
           </g>)}
-          {/* Panned group — markers and particles move with the map */}
-          <g transform={`translate(${panX},${panY})`}>
-            {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
-            {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
-            {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-8} y1={plantPos.y} x2={plantPos.x+8} y2={plantPos.y} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x} y1={plantPos.y-8} x2={plantPos.x} y2={plantPos.y+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
-            {nearbyUserCoalesce&&<CoalesceParticles progress={nearbyUserProgress} particles={nearbyUserCoalesce}/>}
-            {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
-            {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
-            {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-            {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id}/>)}
-          </g>
-          {/* User dot — always pinned at viewport center, never pans */}
+          {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
+          {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
+          {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-8} y1={plantPos.y} x2={plantPos.x+8} y2={plantPos.y} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x} y1={plantPos.y-8} x2={plantPos.x} y2={plantPos.y+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
+          {nearbyUserCoalesce&&<CoalesceParticles progress={nearbyUserProgress} particles={nearbyUserCoalesce}/>}
+          {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
+          {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
+          {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
+          {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id}/>)}
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={1.5} fill={BG} style={{pointerEvents:"none"}}/>
           <text x={CX+8} y={CY+13} fontSize="8" fill={INK_MID} fontFamily={font} letterSpacing="1" fontWeight="600" style={{pointerEvents:"none"}}>{currentUser.handle.toUpperCase()}</text>
         </svg>
-        {/* Return to me — appears when panned away from center */}
-        {(panX!==0||panY!==0)&&(
-          <button onClick={()=>{setPanX(0);setPanY(0);}} title="Return to me" style={{
-            position:"absolute",bottom:14,left:14,width:36,height:36,
-            background:BG,border:"1.5px solid "+INK,display:"flex",alignItems:"center",
-            justifyContent:"center",cursor:"pointer",zIndex:40,
-            boxShadow:"1px 1px 0 "+INK_LIGHT,fontFamily:font,fontSize:14,lineHeight:1,
-          }}>◎</button>
-        )}
         {mapDimProgress>0&&<div style={{position:"absolute",inset:0,background:INK,opacity:mapDimProgress,pointerEvents:"none",transition:"opacity 0.08s"}}/>}
       </div>
     </div>)}
@@ -1228,17 +1104,7 @@ export default function App(){
       </div>
     </div>)}
 
-    <div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
-      {["map","circles","pulse","profile"].map((name,i)=>{
-        var active=tab===name,bg2=active?INK:BG,fg=active?BG:INK;
-        var icon;
-        if(name==="map")icon=<svg width={18} height={18} viewBox="0 0 18 18"><circle cx={9} cy={9} r={8} fill={active?BG:INK}/><circle cx={9} cy={9} r={3} fill={active?INK:BG}/></svg>;
-        else if(name==="circles")icon=<span style={{fontSize:18,color:fg,lineHeight:1}}>◈</span>;
-        else if(name==="pulse")icon=<span style={{fontSize:18,color:fg,lineHeight:1}}>◉</span>;
-        else icon=<StaticAvatar tags={currentUser.tags} size={28} color={fg} bg={bg2}/>;
-        return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:54,background:bg2,border:"none",borderRight:i<3?"1px solid "+INK_LIGHT:"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{icon}</button>);
-      })}
-    </div>
+    <BottomNav tab={tab} setTab={setTab} currentUser={currentUser}/>
     </>}
   </div></div>);
 }
