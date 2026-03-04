@@ -630,7 +630,7 @@ function CreateFlow({onComplete,onCancel}){
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;}";
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;height:100%;min-height:-webkit-fill-available;}#root{height:100%;display:flex;flex-direction:column;}";
     document.head.appendChild(s);
     return()=>s.remove();
   },[]);
@@ -856,7 +856,7 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100vh",minHeight:"-webkit-fill-available",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%"};
+  var outerShell={background:BG_OUTER,minHeight:"100%",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%",flex:1};
   var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:430,flex:1,display:"flex",flexDirection:"column",position:"relative"};
 
   if(!currentUser)return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
