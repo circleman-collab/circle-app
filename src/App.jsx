@@ -961,17 +961,33 @@ function noteOpacity(note){
 }
 
 // ── ENVELOPE MAP ICON ─────────────────────────────────────────────────────────
-function EnvelopeMarker({note,x,y,onClick}){
-  var op=noteOpacity(note);
-  var W=22,H=16;
+function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0}){
+  var baseOp=noteOpacity(note);
+  var W=26,H=18;
+  var hasLens=radius!==null&&radius!==undefined;
+  var screenX=x+panX,screenY=y+panY;
+  var CX=175,CY=210;
+  var distFromCenter=Math.sqrt((screenX-CX)*(screenX-CX)+(screenY-CY)*(screenY-CY));
+  var inLens=!hasLens||distFromCenter<=radius;
+  var op=hasLens?(inLens?baseOp:baseOp*0.12):baseOp;
+  var prevInLens=useRef(inLens);
+  var [wiggling,setWiggling]=useState(false);
+  useEffect(()=>{
+    if(!prevInLens.current&&inLens){setWiggling(true);setTimeout(()=>setWiggling(false),400);}
+    prevInLens.current=inLens;
+  },[inLens]);
+
   return(
-    <g onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:op}} transform={`translate(${x-W/2},${y-H/2})`}>
-      <rect x={0} y={0} width={W} height={H} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="1"/>
-      {/* Envelope flap */}
-      <polyline points={`0,0 ${W/2},${H*0.55} ${W},0`} fill="none" stroke={INK} strokeWidth="1.2"/>
-      {/* Envelope bottom crease lines */}
-      <line x1={0} y1={H} x2={W/2} y2={H*0.55} stroke={INK} strokeWidth="0.8"/>
-      <line x1={W} y1={H} x2={W/2} y2={H*0.55} stroke={INK} strokeWidth="0.8"/>
+    <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:op,transition:"opacity 0.25s ease"}}>
+      <g style={{animation:wiggling?"envelopeWiggle 0.4s ease":"none",transformOrigin:"0px 0px"}}>
+        <rect x={-W/2} y={-H/2} width={W} height={H} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="1"/>
+        <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={INK} strokeWidth="1.2"/>
+        <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth="0.8"/>
+        <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth="0.8"/>
+        {/* Wax seal */}
+        <circle cx={0} cy={H*0.12} r={3.2} fill={INK} opacity="0.85"/>
+        <circle cx={0} cy={H*0.12} r={1.8} fill="none" stroke={NOTE_BG} strokeWidth="0.7"/>
+      </g>
     </g>
   );
 }
@@ -1000,7 +1016,7 @@ function NotePaper({note,onClose,compact=false}){
       {lines.map(i=>(
         <div key={i} style={{
           position:"absolute",left:compact?16:22,right:compact?16:22,
-          top:(compact?38:58)+i*(compact?22:26),
+          top:(compact?40:52)+i*(compact?22:26),
           height:1,background:INK_LIGHT,opacity:0.35,
         }}/>
       ))}
@@ -1084,7 +1100,7 @@ function NoteCompose({onFinish,onCancel}){
         <div style={{background:NOTE_BG,border:"1.5px solid "+INK,boxShadow:"3px 3px 0 "+INK,padding:"20px 18px",position:"relative",boxSizing:"border-box"}}>
           {/* Ruled lines */}
           {[0,1,2,3,4,5].map(i=>(
-            <div key={i} style={{position:"absolute",left:18,right:18,top:52+i*26,height:1,background:INK_LIGHT,opacity:0.35}}/>
+            <div key={i} style={{position:"absolute",left:18,right:18,top:44+i*26,height:1,background:INK_LIGHT,opacity:0.35}}/>
           ))}
           {/* Red margin */}
           <div style={{position:"absolute",left:44,top:0,bottom:0,width:1,background:"#c9a0a0",opacity:0.4}}/>
@@ -1216,7 +1232,7 @@ function ReadNoteModal({note,onClose}){
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;height:100%;min-height:-webkit-fill-available;}#root{height:100%;display:flex;flex-direction:column;}";
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;height:100%;min-height:-webkit-fill-available;}#root{height:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}20%{transform:translate(var(--ex),var(--ey)) rotate(-6deg);}40%{transform:translate(var(--ex),var(--ey)) rotate(5deg);}60%{transform:translate(var(--ex),var(--ey)) rotate(-3deg);}80%{transform:translate(var(--ex),var(--ey)) rotate(2deg);}100%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}}";
     document.head.appendChild(s);
     return()=>s.remove();
   },[]);
@@ -1635,12 +1651,10 @@ export default function App(){
             {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
             {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
             {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} panX={panX} panY={panY}/>)}
-            {/* Placed note envelopes */}
-            <g transform={`translate(${panX},${panY})`}>
-              {notes.filter(n=>n.placed&&n.placedPos).map(n=>(
-                <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={setReadingNote}/>
-              ))}
-            </g>
+            {/* Placed note envelopes — already inside pan group, no extra transform needed */}
+            {notes.filter(n=>n.placed&&n.placedPos).map(n=>(
+              <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={setReadingNote} radius={radius} panX={panX} panY={panY}/>
+            ))}
           </g>
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
@@ -1656,7 +1670,7 @@ export default function App(){
           <button onClick={()=>{setNotesPanelOpen(true);setNotesView("list");}} style={{
             position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",
             background:NOTE_BG,border:"1.5px solid "+INK,borderRight:"none",
-            width:28,padding:"14px 0",cursor:"pointer",zIndex:50,
+            width:38,padding:"16px 0",cursor:"pointer",zIndex:50,
             display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
             boxShadow:"-1px 1px 0 "+INK_LIGHT,
           }}>
