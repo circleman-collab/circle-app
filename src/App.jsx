@@ -945,6 +945,8 @@ export default function App(){
   var [tab,setTab]=useState("map");
   var [radius,setRadius]=useState(null);
   var [drawPhase,setDrawPhase]=useState("idle");
+  var drawPhaseRef=useRef("idle");
+  function setDrawPhaseSync(v){drawPhaseRef.current=v;setDrawPhase(v);}
   var [drawPath,setDrawPath]=useState([]);
   var [liveRadius,setLiveRadius]=useState(0);
   var [circleScale,setCircleScale]=useState(1);
@@ -1134,10 +1136,10 @@ export default function App(){
     return{x:(cx-rect.left-offX)/scale,y:(cy-rect.top-offY)/scale};
   }
 
-  const onDrawStart=useCallback((e)=>{e.preventDefault();if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();setDrawPhase("drawing");setDrawPath([]);setLiveRadius(0);},[]);
+  const onDrawStart=useCallback((e)=>{e.preventDefault();if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();setDrawPhaseSync("drawing");setDrawPath([]);setLiveRadius(0);},[]);
   const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
   const onDrawEnd=useCallback(()=>{
-    setDrawPhase("done");
+    setDrawPhaseSync("done");
     setDrawPath(path=>{
       if(path.length>0){
         var avg=path.reduce((sum,p)=>sum+Math.sqrt((p.x-CX)**2+(p.y-CY)**2),0)/path.length;
@@ -1162,9 +1164,9 @@ export default function App(){
   const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(38));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
   const onMapDown=useCallback((e)=>{
-    if(drawPhase==="idle"){onDrawStart(e);return;}
-    if(drawPhase==="drawing")return;
-    if(drawPhase==="done"){
+    if(drawPhaseRef.current==="idle"){onDrawStart(e);return;}
+    if(drawPhaseRef.current==="drawing")return;
+    if(drawPhaseRef.current==="done"){
       var c=e.touches?e.touches[0]:e;
       if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();
       var pos=toSVG(c.clientX,c.clientY);
@@ -1173,10 +1175,10 @@ export default function App(){
       panOrigin.current={clientX:c.clientX,clientY:c.clientY,px:panX,py:panY,scale:350/rectW};
       startPlantHold({x:pos.x-panX,y:pos.y-panY});
     }
-  },[drawPhase,onDrawStart,startPlantHold,panX,panY]);
+  },[onDrawStart,startPlantHold,panX,panY]);
 
   const onMapMove=useCallback((e)=>{
-    if(drawPhase==="drawing"){onDrawMove(e);return;}
+    if(drawPhaseRef.current==="drawing"){onDrawMove(e);return;}
     var c=e.touches?e.touches[0]:e;
     if(dragging.current&&svgRef.current){
       e.preventDefault();
@@ -1187,7 +1189,7 @@ export default function App(){
       setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
       return;
     }
-    if(drawPhase==="done"&&panOrigin.current){
+    if(drawPhaseRef.current==="done"&&panOrigin.current){
       var dx2=c.clientX-panOrigin.current.clientX,dy2=c.clientY-panOrigin.current.clientY;
       var moved=Math.sqrt(dx2*dx2+dy2*dy2);
       panMoveTotal.current=moved;
@@ -1198,18 +1200,18 @@ export default function App(){
         setPanY(panOrigin.current.py+dy2*(panOrigin.current.scale||1));
       }
     }
-  },[drawPhase,onDrawMove,cancelPlantHold]);
+  },[onDrawMove,cancelPlantHold]);
 
   const onMapUp=useCallback(()=>{
     svgRectCache.current=null;
-    if(drawPhase==="drawing"){onDrawEnd();return;}
+    if(drawPhaseRef.current==="drawing"){onDrawEnd();return;}
     dragging.current=false;
     if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
     panOrigin.current=null;
     cancelPlantHold();
-  },[drawPhase,onDrawEnd,cancelPlantHold]);
+  },[onDrawEnd,cancelPlantHold]);
 
-  function resetRadius(){setDrawPhase("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);setPanX(0);setPanY(0);}
+  function resetRadius(){setDrawPhaseSync("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);setPanX(0);setPanY(0);}
 
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
