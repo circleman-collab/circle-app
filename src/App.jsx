@@ -1230,11 +1230,25 @@ function ReadNoteModal({note,onClose}){
 }
 
 export default function App(){
-  useEffect(()=>{
+  useEffect(()=>{\
     var s=document.createElement("style");
     s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;height:100%;min-height:-webkit-fill-available;}#root{height:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}20%{transform:translate(var(--ex),var(--ey)) rotate(-6deg);}40%{transform:translate(var(--ex),var(--ey)) rotate(5deg);}60%{transform:translate(var(--ex),var(--ey)) rotate(-3deg);}80%{transform:translate(var(--ex),var(--ey)) rotate(2deg);}100%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}}";
     document.head.appendChild(s);
     return()=>s.remove();
+  },[]);
+
+  // Fix iOS keyboard dismiss layout shift — when visualViewport resizes (keyboard
+  // appears/disappears) scroll window back to 0,0 so the app doesn't stay shifted.
+  useEffect(()=>{
+    function resetScroll(){window.scrollTo(0,0);}
+    if(window.visualViewport){
+      window.visualViewport.addEventListener("resize",resetScroll);
+      window.visualViewport.addEventListener("scroll",resetScroll);
+      return()=>{
+        window.visualViewport.removeEventListener("resize",resetScroll);
+        window.visualViewport.removeEventListener("scroll",resetScroll);
+      };
+    }
   },[]);
   var [currentUser,setCurrentUser]=useState(null);
   var [tab,setTab]=useState("map");
