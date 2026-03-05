@@ -1557,8 +1557,8 @@ export default function App(){
   },[pendingPos,currentUser]);
   function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100%",display:"flex",flexDirection:"column",alignItems:"center",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%",flex:1};
-  var phoneCard={background:BG,border:"2.5px solid "+INK,borderRadius:2,width:"100%",maxWidth:430,flex:1,display:"flex",flexDirection:"column",position:"relative",boxSizing:"border-box"};
+  var outerShell={background:BG_OUTER,minHeight:"100%",display:"flex",flexDirection:"column",alignItems:"stretch",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%",flex:1};
+  var phoneCard={background:BG,width:"100%",flex:1,display:"flex",flexDirection:"column",position:"relative",boxSizing:"border-box"};
 
   if(!currentUser)return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
