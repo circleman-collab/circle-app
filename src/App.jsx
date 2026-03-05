@@ -820,34 +820,23 @@ function BottomNav({tab,setTab,currentUser}){
   },[tab]);
   function getIcon(name,active){
     var c=active?BG:INK_MID;
-    var sw=2.2; // stroke weight — chunky
     if(name==="map")return(
-      <svg width={38} height={38} viewBox="0 0 38 38">
-        {/* Crosshair */}
-        <line x1={19} y1={4} x2={19} y2={14} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
-        <line x1={19} y1={24} x2={19} y2={34} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
-        <line x1={4} y1={19} x2={14} y2={19} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
-        <line x1={24} y1={19} x2={34} y2={19} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
-        <circle cx={19} cy={19} r={3.5} fill={c}/>
-        <circle cx={19} cy={19} r={8} fill="none" stroke={c} strokeWidth={sw*0.7}/>
+      <svg width={36} height={36} viewBox="0 0 36 36">
+        <line x1={18} y1={2} x2={18} y2={34} stroke={c} strokeWidth={2} strokeLinecap="round"/>
+        <line x1={2} y1={18} x2={34} y2={18} stroke={c} strokeWidth={2} strokeLinecap="round"/>
+        <circle cx={18} cy={18} r={3} fill={c}/>
       </svg>
     );
     if(name==="circles")return(
-      <svg width={38} height={38} viewBox="0 0 38 38">
-        {/* Concentric rings — thin to thick outward */}
-        <circle cx={19} cy={19} r={4} fill="none" stroke={c} strokeWidth={sw*0.7}/>
-        <circle cx={19} cy={19} r={9} fill="none" stroke={c} strokeWidth={sw}/>
-        <circle cx={19} cy={19} r={15} fill="none" stroke={c} strokeWidth={sw*1.4}/>
+      <svg width={36} height={36} viewBox="0 0 36 36">
+        <circle cx={18} cy={18} r={14} fill="none" stroke={c} strokeWidth={3}/>
       </svg>
     );
     if(name==="pulse")return(
-      <svg width={38} height={38} viewBox="0 0 38 38">
-        {/* Radiating dot with heartbeat spike */}
-        <circle cx={19} cy={19} r={3.5} fill={c}/>
-        <circle cx={19} cy={19} r={8} fill="none" stroke={c} strokeWidth={sw*0.6} opacity="0.5"/>
-        <circle cx={19} cy={19} r={13} fill="none" stroke={c} strokeWidth={sw*0.4} opacity="0.25"/>
-        <polyline points="5,19 10,19 13,12 16,26 19,16 21,22 24,19 33,19"
-          fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"/>
+      <svg width={36} height={36} viewBox="0 0 36 36">
+        <circle cx={18} cy={18} r={3} fill={c}/>
+        <circle cx={18} cy={18} r={9} fill="none" stroke={c} strokeWidth={1.8} strokeDasharray="3 3"/>
+        <circle cx={18} cy={18} r={15} fill="none" stroke={c} strokeWidth={1.2} strokeDasharray="2 4"/>
       </svg>
     );
     if(name==="profile")return <StaticAvatar tags={currentUser?.tags||[]} size={38} color={c} bg={active?INK:BG}/>;
