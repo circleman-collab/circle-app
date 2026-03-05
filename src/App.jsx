@@ -819,11 +819,38 @@ function BottomNav({tab,setTab,currentUser}){
     return()=>{clearTimeout(timer);cancelAnimationFrame(rafRef.current);};
   },[tab]);
   function getIcon(name,active){
-    var color=active?BG:INK_MID;
-    if(name==="map")return(<svg width={20} height={20} viewBox="0 0 20 20"><circle cx={10} cy={10} r={8} fill={active?BG:INK}/><circle cx={10} cy={10} r={3} fill={active?INK:BG}/></svg>);
-    if(name==="circles")return <span style={{fontSize:18,color,lineHeight:1}}>◈</span>;
-    if(name==="pulse")return <span style={{fontSize:18,color,lineHeight:1}}>◉</span>;
-    if(name==="profile")return <StaticAvatar tags={currentUser?.tags||[]} size={26} color={color} bg={active?INK:BG}/>;
+    var c=active?BG:INK_MID;
+    var sw=2.2; // stroke weight — chunky
+    if(name==="map")return(
+      <svg width={38} height={38} viewBox="0 0 38 38">
+        {/* Crosshair */}
+        <line x1={19} y1={4} x2={19} y2={14} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+        <line x1={19} y1={24} x2={19} y2={34} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+        <line x1={4} y1={19} x2={14} y2={19} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+        <line x1={24} y1={19} x2={34} y2={19} stroke={c} strokeWidth={sw} strokeLinecap="round"/>
+        <circle cx={19} cy={19} r={3.5} fill={c}/>
+        <circle cx={19} cy={19} r={8} fill="none" stroke={c} strokeWidth={sw*0.7}/>
+      </svg>
+    );
+    if(name==="circles")return(
+      <svg width={38} height={38} viewBox="0 0 38 38">
+        {/* Concentric rings — thin to thick outward */}
+        <circle cx={19} cy={19} r={4} fill="none" stroke={c} strokeWidth={sw*0.7}/>
+        <circle cx={19} cy={19} r={9} fill="none" stroke={c} strokeWidth={sw}/>
+        <circle cx={19} cy={19} r={15} fill="none" stroke={c} strokeWidth={sw*1.4}/>
+      </svg>
+    );
+    if(name==="pulse")return(
+      <svg width={38} height={38} viewBox="0 0 38 38">
+        {/* Radiating dot with heartbeat spike */}
+        <circle cx={19} cy={19} r={3.5} fill={c}/>
+        <circle cx={19} cy={19} r={8} fill="none" stroke={c} strokeWidth={sw*0.6} opacity="0.5"/>
+        <circle cx={19} cy={19} r={13} fill="none" stroke={c} strokeWidth={sw*0.4} opacity="0.25"/>
+        <polyline points="5,19 10,19 13,12 16,26 19,16 21,22 24,19 33,19"
+          fill="none" stroke={c} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+    if(name==="profile")return <StaticAvatar tags={currentUser?.tags||[]} size={38} color={c} bg={active?INK:BG}/>;
     return null;
   }
   return(<div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
