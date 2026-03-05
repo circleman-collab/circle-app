@@ -383,19 +383,19 @@ function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
         onClick={()=>setOpen(o=>!o)}
         style={{
           display:"flex",alignItems:"center",justifyContent:"space-between",
-          padding:"0 18px",height:32,
+          padding:"0 18px",height:48,
           background:open?INK:BG,
-          borderBottom:"1.5px solid "+(open?INK:INK_LIGHT),
+          borderBottom:"2px solid "+INK,
           cursor:"pointer",
           transition:"background 0.15s",
         }}
       >
         <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-          <span style={{fontSize:8,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:open?BG:INK_MID,flexShrink:0}}>STATUS</span>
+          <span style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:open?BG:INK_MID,flexShrink:0}}>STATUS</span>
           <span style={{
-            fontSize:11,fontStyle:hasStatus?"italic":"italic",
+            fontSize:13,fontStyle:hasStatus?"italic":"italic",
             color:open?BG:(hasStatus?INK:INK_LIGHT),
-            fontWeight:hasStatus?600:400,
+            fontWeight:hasStatus?700:400,
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
             maxWidth:180,
           }}>
@@ -644,23 +644,44 @@ function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*
 
 function FistIcon({size=12,color=INK}){var lo=color===BG||color==="white"?"rgba(0,0,0,0.15)":"rgba(255,255,255,0.2)";return(<svg width={size} height={size} viewBox="0 0 24 28" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}><path d="M 5 14 L 5 9 Q 5 7 7 7 L 10 7 Q 10 5 12 5 L 13 5 Q 15 5 15 7 L 17 7 Q 19 7 19 9 L 19 11 Q 19 13 17 13 L 17 14 Q 17 16 15 16 L 7 16 Q 5 16 5 14 Z" fill={color}/><path d="M 5 13 Q 3 12 2 10 Q 1 8 3 8 Q 5 8 6 10 L 6 13 Z" fill={color}/><path d="M 5 16 Q 5 20 6 22 L 18 22 Q 19 20 19 16 Q 17 16 15 16 L 7 16 Q 5 16 5 16 Z" fill={color}/><line x1="8" y1="7.5" x2="8" y2="10" stroke={lo} strokeWidth="0.8"/><line x1="12" y1="5.5" x2="12" y2="9" stroke={lo} strokeWidth="0.8"/><line x1="16" y1="7.5" x2="16" y2="10" stroke={lo} strokeWidth="0.8"/></svg>);}
 
-function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted}){
+function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,lensReveal}){
   var R=10,color=DRAFT_COLORS[chat.id]||INK;
   var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
-  var inRange=radius===null||chat.r<=radius,baseOp=inRange?1:0.2;
+  // lensReveal: 0=outside lens (dim), 1=inside lens (lit)
+  // If no lens drawn yet, everything shows at full opacity
+  var hasLens=radius!==null&&radius!==undefined;
+  var inLens=!hasLens||(chat.r<=radius);
+  var lr=lensReveal||0;
+  // Outside lens: fade to 0.15. Inside lens: bright pop with slight glow ring
+  var baseOp=hasLens?(inLens?1:0.15):1;
+
   if(chat.type==="hidden"){
     if(!revealProgress||revealProgress<=0)return null;
     var rp=revealProgress,sh=0.4+0.6*Math.sin(rp*Math.PI),hatch=[];
     for(var i=-R;i<=R;i+=3.5){var hw=Math.sqrt(Math.max(0,R*R-i*i));hatch.push(<line key={i} x1={x-hw} y1={y+i} x2={x+hw} y2={y+i} stroke={color} strokeWidth="0.7" opacity={0.45*rp}/>);}
-    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp*baseOp}}><circle cx={x} cy={y} r={22} fill="transparent"/><circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/><clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath><g clipPath={"url(#hclip"+chat.id+")"}>{hatch}</g><circle cx={x} cy={y} r={R} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={chat.pulseable!==false?"3 2.5":"none"}/><text x={x} y={y+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font}>?</text></g>);
+    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp*baseOp}}>
+      <circle cx={x} cy={y} r={22} fill="transparent"/>
+      <circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/>
+      <clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath>
+      <g clipPath={"url(#hclip"+chat.id+")"}>{hatch}</g>
+      <circle cx={x} cy={y} r={R} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={chat.pulseable!==false?"3 2.5":"none"}/>
+      <text x={x} y={y+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font}>?</text>
+    </g>);
   }
-  return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition:"opacity 0.25s"}}>
+
+  // DS-style lens pop: when inLens, add a soft glow ring that fades in
+  var glowOp=hasLens&&inLens?lr*0.35:0;
+  var glowR=R+5+lr*3;
+
+  return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition:"opacity 0.3s"}}>
     <circle cx={x} cy={y} r={22} fill="transparent"/>
+    {/* Lens glow ring — DS illuminate effect */}
+    {hasLens&&inLens&&<circle cx={x} cy={y} r={glowR} fill="none" stroke={color} strokeWidth="2.5" opacity={glowOp}/>}
     {highlighted&&<circle cx={x} cy={y} r={R+10} fill="none" stroke={color} strokeWidth="1.5" opacity={0.6} strokeDasharray="3 3"/>}
     {highlighted&&<circle cx={x} cy={y} r={R+18} fill="none" stroke={color} strokeWidth="0.8" opacity={0.25} strokeDasharray="2 4"/>}
     {chat.type==="open"&&<circle cx={x} cy={y} r={R} fill={color}/>}
     {chat.type==="closed"&&<circle cx={x} cy={y} r={R} fill={BG} stroke={color} strokeWidth="2"/>}
-    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inRange?1:0.3}>{chat.name.toUpperCase()}</text>
+    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inLens||!hasLens?1:0.15}>{chat.name.toUpperCase()}</text>
   </g>);
 }
 
@@ -810,7 +831,7 @@ function BottomNav({tab,setTab,currentUser}){
   return(<div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
     {tabs.map((name,i)=>{
       var active=tab===name;
-      return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:68,background:active?INK:BG,border:"none",borderRight:i<3?"1px solid "+(active?INK:INK_LIGHT):"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background 0.18s"}}>
+      return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:76,background:active?INK:BG,border:"none",borderRight:i<3?"1px solid "+(active?INK:INK_LIGHT):"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background 0.18s"}}>
         {active?(<span style={{fontSize:9,fontWeight:900,letterSpacing:2.5,textTransform:"uppercase",color:BG,opacity:animatingTab===name?labelOpacity:0,transition:"opacity 0.09s",userSelect:"none"}}>{name}</span>):(getIcon(name,false))}
       </button>);
     })}
@@ -838,6 +859,8 @@ export default function App(){
   var [joinedIds,setJoinedIds]=useState(new Set());
   var [revealedIds,setRevealedIds]=useState(new Set());
   var [revealProgress,setRevealProgress]=useState({});
+  var [lensReveal,setLensReveal]=useState({});
+  var lensRevealRefs=useRef({});
   var [breathe,setBreathe]=useState(1);
   var [holdProgress,setHoldProgress]=useState(0);
   var [pulseState,setPulseState]=useState("idle");
@@ -910,15 +933,40 @@ export default function App(){
     setMapDimProgress(0);
     if(!currentUser?.pulseCheck)return;
     var key=++pulseCheckKey.current;
-    bumpTimer.current=setTimeout(()=>{if(pulseCheckKey.current!==key)return;setBumpActive(true);},3000);
+    bumpTimer.current=setTimeout(()=>{if(pulseCheckKey.current!==key)return;setBumpActive(true);setTimeout(()=>setBumpActive(false),3000);},3000);
     interestTimer.current=setTimeout(()=>{
       if(pulseCheckKey.current!==key)return;
       var userTags=currentUser.tags||[];
       var best=INIT_CHATS.filter(c=>c.type!=="hidden"&&!joinedIds.has(c.id)).map(c=>({c,shared:c.tags.filter(t=>userTags.includes(t))})).filter(x=>x.shared.length>0).sort((a,b)=>b.shared.length-a.shared.length)[0];
-      if(best){setInterestMatchCircle(best.c);setInterestMatchTags(best.shared);}
+      if(best){setInterestMatchCircle(best.c);setInterestMatchTags(best.shared);setTimeout(()=>setInterestMatchCircle(null),3000);}
     },6000);
     return()=>{clearTimeout(bumpTimer.current);clearTimeout(interestTimer.current);};
   },[currentUser?.pulseCheck]);
+
+  // Animate lens reveal — DS-style illuminate as markers enter/exit the lens
+  useEffect(()=>{
+    var rafs=[];
+    allChats.filter(c=>c.type!=="hidden").forEach(c=>{
+      var inLens=radius!==null&&radius!==undefined&&c.r<=radius;
+      var current=lensRevealRefs.current[c.id]||0;
+      var target=inLens?1:0;
+      if(current===target)return;
+      var start=performance.now();
+      var from=current;
+      var dur=inLens?220:300;
+      function animate(){
+        var p=Math.min(1,(performance.now()-start)/dur);
+        // DS pop: fast ease-out in, smooth ease-in-out out
+        var eased=inLens?1-Math.pow(1-p,2.5):p*p;
+        var val=from+(target-from)*eased;
+        lensRevealRefs.current[c.id]=val;
+        setLensReveal(prev=>({...prev,[c.id]:val}));
+        if(p<1)rafs.push(requestAnimationFrame(animate));
+      }
+      rafs.push(requestAnimationFrame(animate));
+    });
+    return()=>rafs.forEach(r=>cancelAnimationFrame(r));
+  },[radius,allChats]);
 
   function revealHiddenCircle(id){
     if(revealedIds.has(id))return;
@@ -1157,9 +1205,6 @@ export default function App(){
     {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
       <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
 
-      <div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:36}}>
-        <span style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Radius</span>
-      </div>
       {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
         <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
@@ -1187,7 +1232,7 @@ export default function App(){
             {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
             {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
             {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-            {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id}/>)}
+            {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} lensReveal={lensReveal[c.id]||0}/>)}
           </g>
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
