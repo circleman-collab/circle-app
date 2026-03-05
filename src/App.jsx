@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 
 // Renders children into document.body, completely outside the flex layout chain.
@@ -103,7 +103,8 @@ function StaticAvatar({tags,size=24,color=INK,bg=BG}){
 
 // FIX 3: Added flexShrink:0 to SVG style
 function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,animStyle=0,onBurstEnd}){
-  var path=genAvatarPath(tags,size),cx=size/2,cy=size/2,n=tags.length;
+  var path=useMemo(()=>genAvatarPath(tags,size),[tags.join(","),size]);
+  var cx=size/2,cy=size/2,n=tags.length;
   var breatheAmp=0.018+(n/9)*0.055,breatheSpeed=0.018+(n/9)*0.014;
   var [breathe,setBreathe]=useState(1);
   var breatheRaf=useRef(null),breatheT=useRef(Math.random()*Math.PI*2);
