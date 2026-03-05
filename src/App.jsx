@@ -1230,7 +1230,7 @@ function ReadNoteModal({note,onClose}){
 }
 
 export default function App(){
-  useEffect(()=>{\
+  useEffect(()=>{
     var s=document.createElement("style");
     s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;height:100%;min-height:-webkit-fill-available;}#root{height:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}20%{transform:translate(var(--ex),var(--ey)) rotate(-6deg);}40%{transform:translate(var(--ex),var(--ey)) rotate(5deg);}60%{transform:translate(var(--ex),var(--ey)) rotate(-3deg);}80%{transform:translate(var(--ex),var(--ey)) rotate(2deg);}100%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}}";
     document.head.appendChild(s);
