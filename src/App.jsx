@@ -640,7 +640,7 @@ function CityMapLayer({panX,panY}){
 function genPulseParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.55;p.push({angle:a,dist:55+Math.random()*110,size:0.8+Math.random()*2.8,delay:Math.random()*.28,drift:(Math.random()-.5)*4.5,driftFreq:1.2+Math.random()*3.5});}return p;}
 function genOutwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.25;p.push({angle:a,travelMult:1.1+Math.random()*1.8,size:.8+Math.random()*2.2,delay:Math.random()*.22,drift:(Math.random()-.5)*3.5,driftFreq:1.5+Math.random()*3,brightness:.4+Math.random()*.6});}return p;}
 function genInwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.4;p.push({angle:a,spawnMult:1.3+Math.random()*1.4,size:.8+Math.random()*1.8,delay:Math.random()*.28,drift:(Math.random()-.5)*2.8,driftFreq:1.5+Math.random()*2.5,brightness:.35+Math.random()*.65});}return p;}
-function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2;p.push({angle:a+(Math.random()-.5)*.5,scatter:22+Math.random()*28,size:1.2+Math.random()*1.2,delay:Math.random()*.2,drift:(Math.random()-.5)*2.2,driftFreq:2+Math.random()*2.5});}return p;}
+function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2;var big=i%4===0;p.push({angle:a+(Math.random()-.5)*.7,scatter:big?(38+Math.random()*22):(16+Math.random()*28),size:big?(1.8+Math.random()*1.4):(0.8+Math.random()*1.4),delay:Math.random()*.25,drift:(Math.random()-.5)*3.2,driftFreq:1.5+Math.random()*3});}return p;}
 
 function FistIcon({size=12,color=INK}){var lo=color===BG||color==="white"?"rgba(0,0,0,0.15)":"rgba(255,255,255,0.2)";return(<svg width={size} height={size} viewBox="0 0 24 28" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}><path d="M 5 14 L 5 9 Q 5 7 7 7 L 10 7 Q 10 5 12 5 L 13 5 Q 15 5 15 7 L 17 7 Q 19 7 19 9 L 19 11 Q 19 13 17 13 L 17 14 Q 17 16 15 16 L 7 16 Q 5 16 5 14 Z" fill={color}/><path d="M 5 13 Q 3 12 2 10 Q 1 8 3 8 Q 5 8 6 10 L 6 13 Z" fill={color}/><path d="M 5 16 Q 5 20 6 22 L 18 22 Q 19 20 19 16 Q 17 16 15 16 L 7 16 Q 5 16 5 16 Z" fill={color}/><line x1="8" y1="7.5" x2="8" y2="10" stroke={lo} strokeWidth="0.8"/><line x1="12" y1="5.5" x2="12" y2="9" stroke={lo} strokeWidth="0.8"/><line x1="16" y1="7.5" x2="16" y2="10" stroke={lo} strokeWidth="0.8"/></svg>);}
 
@@ -872,7 +872,7 @@ export default function App(){
   var [pulseParticles,setPulseParticles]=useState(()=>genPulseParticles(72));
   var [outwardParticles,setOutwardParticles]=useState(()=>genOutwardParticles(55));
   var [inwardParticles,setInwardParticles]=useState(()=>genInwardParticles(45));
-  var [plantParticles,setPlantParticles]=useState(()=>genPlantParticles(22));
+  var [plantParticles,setPlantParticles]=useState(()=>genPlantParticles(38));
 
   var [nearbyUser,setNearbyUser]=useState(null);
   var [nearbyUserProgress,setNearbyUserProgress]=useState(0);
@@ -1025,7 +1025,7 @@ export default function App(){
   const startPulseHold=useCallback((e)=>{if(pulseState!=="idle")return;var el=e.currentTarget.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;setTouchPt({x:((cx-el.left)/el.width)*128,y:((cy-el.top)/el.width)*128});pulseHoldStart.current=performance.now();setPulseState("charging");function tick(){var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);setHoldProgress(p);if(p<1){pulseHoldRaf.current=requestAnimationFrame(tick);}}pulseHoldRaf.current=requestAnimationFrame(tick);},[pulseState]);
   const cancelPulseHold=useCallback(()=>{if(pulseState!=="charging")return;cancelAnimationFrame(pulseHoldRaf.current);var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);if(p>=.8){firePulse();}else{setPulseState("idle");setHoldProgress(0);}},[pulseState,firePulse]);
 
-  function toSVG(cx,cy){if(!svgRef.current)return{x:0,y:0};var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();return{x:(cx-rect.left)*(350/rect.width),y:(cy-rect.top)*(420/rect.height)};}
+  function toSVG(cx,cy){if(!svgRef.current)return{x:0,y:0};var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();var scale=350/rect.width;return{x:(cx-rect.left)*scale,y:(cy-rect.top)*scale};}
 
   const onDrawStart=useCallback((e)=>{e.preventDefault();if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();setDrawPhase("drawing");setDrawPath([]);setLiveRadius(0);},[]);
   const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
@@ -1052,7 +1052,7 @@ export default function App(){
     });
   },[]);
 
-  const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(22));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
+  const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(38));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
   const onMapDown=useCallback((e)=>{
     if(drawPhase==="idle"){onDrawStart(e);return;}
@@ -1074,7 +1074,7 @@ export default function App(){
     if(dragging.current&&svgRef.current){
       e.preventDefault();
       var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();
-      var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
+      var scale2=350/rect.width;var dx=(c.clientX-rect.left)*scale2-CX,dy=(c.clientY-rect.top)*scale2-CY;
       setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
       return;
     }
