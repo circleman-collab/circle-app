@@ -46,19 +46,44 @@ function tagSeed(tags){var s=0;(tags||[]).forEach(t=>{for(var i=0;i<t.length;i++
 function seededRand(seed,i){var x=Math.sin(seed+i*127.1)*43758.5453123;return x-Math.floor(x);}
 
 function genAvatarPath(tags,size){
-  var n=tags.length,seed=tagSeed(tags),cx=size/2,cy=size/2,baseR=size*0.36,steps=120,reveal=n/9;
-  var numPulls=4+Math.floor(seededRand(seed,0)*3),pulls=[];
-  for(var p=0;p<numPulls;p++){var angle=(p/numPulls)*Math.PI*2+seededRand(seed,p+1)*1.1-0.55;var depth=size*(0.10+seededRand(seed,p+10)*0.13);var width=0.38+seededRand(seed,p+20)*0.35;pulls.push({angle,depth,width});}
-  var numBumps=numPulls,bumps=[];
-  for(var b=0;b<numBumps;b++){var bAngle=((b+0.5)/numBumps)*Math.PI*2+seededRand(seed,b+30)*0.5;var bHeight=size*(0.018+seededRand(seed,b+40)*0.028);var bWidth=0.25+seededRand(seed,b+50)*0.2;bumps.push({angle:bAngle,height:bHeight,width:bWidth});}
-  var d="";
+  var n=tags.length,seed=tagSeed(tags),cx=size/2,cy=size/2;
+  var reveal=Math.max(0.15,n/9); // always show something even with 0 tags
+  var sr=seededRand; // shorthand
+
+  // Base radius varies by seed — some avatars are bigger, some compact
+  var baseR=size*(0.28+sr(seed,99)*0.12);
+
+  // Pull count: 2–8, influenced by tag count for complexity
+  var minPulls=2,maxPulls=3+Math.floor(n/2);
+  var numPulls=minPulls+Math.floor(sr(seed,0)*(maxPulls-minPulls+1));
+
+  // Pulls: mix of deep inward dents and outward spikes
+  var pulls=[];
+  for(var p=0;p<numPulls;p++){
+    var angle=(p/numPulls)*Math.PI*2+sr(seed,p+1)*1.4-0.7;
+    var isSpike=sr(seed,p+60)>0.55; // ~45% chance of outward spike
+    var depth=isSpike
+      ?-size*(0.06+sr(seed,p+10)*0.14)  // outward spike
+      : size*(0.08+sr(seed,p+10)*0.22); // inward dent — deeper than before
+    var width=0.18+sr(seed,p+20)*0.55;  // wider range — some tight, some broad
+    pulls.push({angle,depth,width,isSpike});
+  }
+
+  // High-frequency noise for texture — varies per seed
+  var noiseAmp=size*(0.005+sr(seed,77)*0.018);
+  var noiseFreq=Math.floor(5+sr(seed,78)*14);
+
+  var steps=120,d="";
   for(var i=0;i<=steps;i++){
     var t=(i/steps)*Math.PI*2,pullTotal=0;
-    for(var pi=0;pi<pulls.length;pi++){var diff=t-pulls[pi].angle;while(diff>Math.PI)diff-=Math.PI*2;while(diff<-Math.PI)diff+=Math.PI*2;pullTotal+=Math.exp(-(diff*diff)/(2*pulls[pi].width*pulls[pi].width))*pulls[pi].depth;}
-    var bumpTotal=0;
-    for(var bi=0;bi<bumps.length;bi++){var bdiff=t-bumps[bi].angle;while(bdiff>Math.PI)bdiff-=Math.PI*2;while(bdiff<-Math.PI)bdiff+=Math.PI*2;bumpTotal+=Math.exp(-(bdiff*bdiff)/(2*bumps[bi].width*bumps[bi].width))*bumps[bi].height;}
-    var residual=size*0.004*Math.sin(t*17+seed%6.28);
-    var wr=baseR-pullTotal*reveal+bumpTotal*reveal+residual;
+    for(var pi=0;pi<pulls.length;pi++){
+      var diff=t-pulls[pi].angle;
+      while(diff>Math.PI)diff-=Math.PI*2;
+      while(diff<-Math.PI)diff+=Math.PI*2;
+      pullTotal+=Math.exp(-(diff*diff)/(2*pulls[pi].width*pulls[pi].width))*pulls[pi].depth;
+    }
+    var noise=noiseAmp*Math.sin(t*noiseFreq+seed%6.28);
+    var wr=baseR-pullTotal*reveal+noise*reveal;
     d+=(i===0?"M ":"L ")+(cx+wr*Math.cos(t-Math.PI/2)).toFixed(2)+" "+(cy+wr*Math.sin(t-Math.PI/2)).toFixed(2)+" ";
   }
   return d+"Z";
@@ -77,17 +102,70 @@ function StaticAvatar({tags,size=24,color=INK,bg=BG}){
 }
 
 // FIX 3: Added flexShrink:0 to SVG style
-function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,onBurstEnd}){
+function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,animStyle=0,onBurstEnd}){
   var path=genAvatarPath(tags,size),cx=size/2,cy=size/2,n=tags.length;
   var breatheAmp=0.018+(n/9)*0.055,breatheSpeed=0.018+(n/9)*0.014;
   var [breathe,setBreathe]=useState(1);
   var breatheRaf=useRef(null),breatheT=useRef(Math.random()*Math.PI*2);
   useEffect(()=>{function loop(){breatheT.current+=breatheSpeed;setBreathe(1+breatheAmp*Math.sin(breatheT.current));breatheRaf.current=requestAnimationFrame(loop);}breatheRaf.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(breatheRaf.current);},[breatheAmp,breatheSpeed]);
-  var [particles,setParticles]=useState(null),[burstProg,setBurstProg]=useState(0),[expand,setExpand]=useState(1);
-  var burstRaf=useRef(null),burstStart=useRef(null),BURST_DUR=grand?1100:620;
-  useEffect(()=>{if(!burst)return;setParticles(genAvatarParticles(18,size,grand));setBurstProg(0);setExpand(1);burstStart.current=performance.now();function tick(){var p=Math.min(1,(performance.now()-burstStart.current)/BURST_DUR);setBurstProg(p);if(grand){var ep=p<0.18?p/0.18:1-((p-0.18)/0.82);setExpand(1+ep*0.13);}if(p<1){burstRaf.current=requestAnimationFrame(tick);}else{setParticles(null);setBurstProg(0);setExpand(1);onBurstEnd&&onBurstEnd();}}burstRaf.current=requestAnimationFrame(tick);return()=>cancelAnimationFrame(burstRaf.current);},[burst]);
+  var [particles,setParticles]=useState(null),[burstProg,setBurstProg]=useState(0),[expand,setExpand]=useState(1),[rotate,setRotate]=useState(0);
+  var burstRaf=useRef(null),burstStart=useRef(null);
+  // animStyle: 0=pop, 1=spin, 2=scatter, 3=ripple
+  var BURST_DUR=grand?1100:animStyle===3?900:animStyle===2?750:620;
+  useEffect(()=>{
+    if(!burst)return;
+    var pCount=animStyle===2?28:18;
+    setParticles(genAvatarParticles(pCount,size,grand));
+    setBurstProg(0);setExpand(1);setRotate(0);
+    burstStart.current=performance.now();
+    function tick(){
+      var p=Math.min(1,(performance.now()-burstStart.current)/BURST_DUR);
+      setBurstProg(p);
+      if(animStyle===0||grand){
+        // pop: expand then contract
+        var ep=p<0.18?p/0.18:1-((p-0.18)/0.82);
+        setExpand(1+ep*(grand?0.13:0.08));
+      } else if(animStyle===1){
+        // spin: rotate while expanding slightly then settling
+        setRotate(p*p*22);
+        setExpand(1+Math.sin(p*Math.PI)*0.1);
+      } else if(animStyle===2){
+        // scatter: quick small pop, particles do the work
+        setExpand(1+Math.sin(p*Math.PI)*0.05);
+      } else if(animStyle===3){
+        // ripple: expands and stays large, slowly deflates
+        setExpand(1+Math.sin(Math.min(p,0.5)*Math.PI)*0.15);
+      }
+      if(p<1){burstRaf.current=requestAnimationFrame(tick);}
+      else{setParticles(null);setBurstProg(0);setExpand(1);setRotate(0);onBurstEnd&&onBurstEnd();}
+    }
+    burstRaf.current=requestAnimationFrame(tick);
+    return()=>cancelAnimationFrame(burstRaf.current);
+  },[burst]);
   var strokeW=size*0.032*(0.6+(n/9)*0.5);
-  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{overflow:"visible",flexShrink:0}}>{grand&&burst&&burstProg>0&&[0,0.15,0.3].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.7));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.36+rp*0.55)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.022} opacity={(1-rp)*0.5} style={{pointerEvents:"none"}}/>;})}{particles&&particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,0.5),lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=cx+Math.cos(p.angle)*p.dist*e+Math.cos(pa)*lat,py=cy+Math.sin(p.angle)*p.dist*e+Math.sin(pa)*lat;return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,grand?0.7:0.9)*(grand?0.95:0.85)} style={{pointerEvents:"none"}}/>;})}<g transform={`translate(${cx},${cy}) scale(${breathe*expand}) translate(${-cx},${-cy})`}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></g></svg>);
+  var particleDistMult=animStyle===2?1.6:1;
+  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{overflow:"visible",flexShrink:0}}>
+    {grand&&burst&&burstProg>0&&[0,0.15,0.3].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.7));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.36+rp*0.55)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.022} opacity={(1-rp)*0.5} style={{pointerEvents:"none"}}/>;})}
+    {/* Ripple style rings */}
+    {animStyle===3&&burst&&burstProg>0&&[0,0.2].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.8));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.3+rp*0.6)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.018} opacity={(1-rp)*0.4} style={{pointerEvents:"none"}}/>;})
+    }
+    {particles&&particles.map((p,i)=>{
+      var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));
+      if(lp<=0)return null;
+      var e=Math.pow(lp,animStyle===2?0.4:0.5);
+      var dist=p.dist*particleDistMult;
+      var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;
+      var px=cx+Math.cos(p.angle)*dist*e+Math.cos(pa)*lat;
+      var py=cy+Math.sin(p.angle)*dist*e+Math.sin(pa)*lat;
+      var fadeExp=animStyle===2?0.55:grand?0.7:0.9;
+      return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,fadeExp)*(grand?0.95:0.85)} style={{pointerEvents:"none"}}/>;
+    })}
+    <g transform={`translate(${cx},${cy}) scale(${breathe*expand}) rotate(${rotate}) translate(${-cx},${-cy})`}>
+      <path d={path} fill="none" stroke={color} strokeWidth={strokeW}/>
+      <circle cx={cx} cy={cy} r={size*0.085} fill={color}/>
+      <circle cx={cx} cy={cy} r={size*0.038} fill={bg}/>
+    </g>
+  </svg>);
 }
 
 function genCoalesceParticles(count,tx,ty){
@@ -723,15 +801,16 @@ function OnboardingFlow({onComplete}){
   var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none",width:"100%"};
   var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%"};
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[step]);
-  function addTag(t){var c=t.trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();if(!c||tags.includes(c)||tags.length>=9)return;var next=[...tags,c];setTags(next);setTagInput("");var isGrand=next.length===9;setAvatarGrand(isGrand);setAvatarBurst(true);}
-  function removeTag(t){setTags(p=>p.filter(x=>x!==t));setAvatarGrand(false);setAvatarBurst(true);}
+  var [avatarAnimStyle,setAvatarAnimStyle]=useState(0);
+  function addTag(t){var c=t.trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();if(!c||tags.includes(c)||tags.length>=9)return;var next=[...tags,c];setTags(next);setTagInput("");var isGrand=next.length===9;setAvatarGrand(isGrand);setAvatarAnimStyle(isGrand?0:Math.floor(Math.random()*4));setAvatarBurst(true);}
+  function removeTag(t){setTags(p=>p.filter(x=>x!==t));setAvatarGrand(false);setAvatarAnimStyle(Math.floor(Math.random()*4));setAvatarBurst(true);}
   var canNext1=name.trim().length>=2&&handle.trim().length>=2,canNext2=tags.length>=5;
   function finish(){var hh=handle.trim().startsWith("@")?handle.trim():"@"+handle.trim();onComplete({id:"user_local",displayName:name.trim(),handle:hh,tags,status:status.trim(),pulseCheck,statusPresets:[...DEFAULT_PRESETS]});}
   return(<div style={{flex:1,display:"flex",flexDirection:"column",background:BG}}>
     <div style={{padding:"32px 28px 0"}}><div style={{fontWeight:900,fontSize:28,letterSpacing:4,textTransform:"uppercase",color:INK,marginBottom:6}}>Circle</div><div style={{fontSize:10,color:INK_MID,letterSpacing:2,fontWeight:700,marginBottom:28}}>STEP {step} OF 3</div><div style={{height:2,background:INK_LIGHT,marginBottom:32,position:"relative"}}><div style={{position:"absolute",top:0,left:0,height:"100%",background:INK,width:((step/3)*100)+"%",transition:"width 0.4s"}}/></div></div>
     {step===1&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"0 28px 32px",gap:28,overflowY:"auto"}}>
       <div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Who are you?</div><div style={{fontSize:13,color:INK_MID,lineHeight:1.7}}>No photo required. Your identity here is your name, your handle, and what you care about.</div></div>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,padding:"20px 0"}}><UserAvatar tags={tags} size={140} color={INK} bg={BG} burst={avatarBurst} grand={avatarGrand} onBurstEnd={()=>{setAvatarBurst(false);setAvatarGrand(false);}}/><div style={{fontSize:9,color:INK_LIGHT,letterSpacing:1.5,textTransform:"uppercase"}}>Your avatar — shaped by your interests</div></div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,padding:"20px 0"}}><UserAvatar tags={tags} size={140} color={INK} bg={BG} burst={avatarBurst} grand={avatarGrand} animStyle={avatarAnimStyle} onBurstEnd={()=>{setAvatarBurst(false);setAvatarGrand(false);}}/><div style={{fontSize:9,color:INK_LIGHT,letterSpacing:1.5,textTransform:"uppercase"}}>Your avatar — shaped by your interests</div></div>
       <div style={{display:"flex",flexDirection:"column",gap:20}}>
         <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Display name</div><input ref={inputRef} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" maxLength={32} style={{...ii,fontSize:20,fontWeight:900,padding:"6px 0"}} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}}/></div>
         <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Handle</div><input value={handle} onChange={e=>setHandle(e.target.value.replace(/\s/g,""))} placeholder="@yourhandle" maxLength={24} style={{...ii,fontSize:16,fontWeight:700,padding:"6px 0",color:INK_MID}} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}}/><div style={{fontSize:9,color:INK_LIGHT,marginTop:6}}>This is how others see you in circles.</div></div>
@@ -740,7 +819,7 @@ function OnboardingFlow({onComplete}){
     </div>)}
     {step===2&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"0 28px 32px",gap:20,overflowY:"auto"}}>
       <div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>What are you into?</div><div style={{fontSize:13,color:INK_MID,lineHeight:1.7}}>Pick 5–9 interests. These shape your avatar, your pulse signal, and what circles find you.</div></div>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"12px 0"}}><UserAvatar tags={tags} size={120} color={INK} bg={BG} burst={avatarBurst} grand={avatarGrand} onBurstEnd={()=>{setAvatarBurst(false);setAvatarGrand(false);}}/><div style={{fontSize:9,color:INK_LIGHT,letterSpacing:1,textTransform:"uppercase"}}>{tags.length} / 9 selected</div></div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"12px 0"}}><UserAvatar tags={tags} size={120} color={INK} bg={BG} burst={avatarBurst} grand={avatarGrand} animStyle={avatarAnimStyle} onBurstEnd={()=>{setAvatarBurst(false);setAvatarGrand(false);}}/><div style={{fontSize:9,color:INK_LIGHT,letterSpacing:1,textTransform:"uppercase"}}>{tags.length} / 9 selected</div></div>
       <div style={{minHeight:56,display:"flex",flexWrap:"wrap",gap:8,alignItems:"flex-start"}}>{tags.length===0&&<span style={{fontSize:10,color:INK_LIGHT,fontStyle:"italic"}}>Tap interests below to add them</span>}{tags.map(t=>(<div key={t} onClick={()=>removeTag(t)} style={{display:"inline-flex",alignItems:"center",gap:5,background:INK,color:BG,padding:"5px 10px",fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{t} <span style={{opacity:.5}}>×</span></div>))}</div>
       {tags.length<9&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={step===2?inputRef:null} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="or type your own..." maxLength={24} style={{...ii,fontSize:16,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput)} style={{background:tagInput.trim()?INK:"none",color:tagInput.trim()?BG:INK_LIGHT,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}
       <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:10}}>Suggestions</div><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{ALL_INTEREST_TAGS.filter(s=>!tags.includes(s)).map(s=>(<div key={s} onClick={()=>{if(tags.length<9)addTag(s);}} style={{border:"1.5px solid "+INK_LIGHT,padding:"8px 12px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:tags.length<9?"pointer":"default",color:tags.length<9?INK_MID:INK_LIGHT,minHeight:36,display:"inline-flex",alignItems:"center"}}>{s}</div>))}</div></div>
@@ -822,8 +901,10 @@ function BottomNav({tab,setTab,currentUser}){
     var c=active?BG:INK_MID;
     if(name==="map")return(
       <svg width={36} height={36} viewBox="0 0 36 36">
-        <line x1={18} y1={2} x2={18} y2={34} stroke={c} strokeWidth={2} strokeLinecap="round"/>
-        <line x1={2} y1={18} x2={34} y2={18} stroke={c} strokeWidth={2} strokeLinecap="round"/>
+        <line x1={18} y1={2} x2={18} y2={12} stroke={c} strokeWidth={2} strokeLinecap="round"/>
+        <line x1={18} y1={24} x2={18} y2={34} stroke={c} strokeWidth={2} strokeLinecap="round"/>
+        <line x1={2} y1={18} x2={12} y2={18} stroke={c} strokeWidth={2} strokeLinecap="round"/>
+        <line x1={24} y1={18} x2={34} y2={18} stroke={c} strokeWidth={2} strokeLinecap="round"/>
         <circle cx={18} cy={18} r={3} fill={c}/>
       </svg>
     );
