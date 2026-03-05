@@ -14,6 +14,11 @@ const font="'Helvetica Neue', Arial, sans-serif";
 const DRAFT_COLORS={1:"#7a6a3a",2:"#3a5a4a",3:"#4a3a6a",4:"#7a3a3a",5:"#3a5a6a",6:"#6a4a3a"};
 const HOLD_MS=1500, PLANT_MS=1200;
 const TAG_SUGGESTIONS=["jazz","night runs","street food","vinyl","cycling","coffee","art","dogs","books","film","hiking","music","food","gaming","photography","design","travel","cooking","fitness","tech","poetry","theatre","yoga","climbing","skateboarding"];
+const NOTE_MAX_CHARS=100;
+const NOTE_MAX_UNPLACED=7;
+const NOTE_FADE_DAYS=15;
+const NOTE_EXPIRE_DAYS=30;
+const NOTE_BG="#f5f0e0"; // aged paper — warm but not yellow
 const ALL_INTEREST_TAGS=["coffee","music","art","books","film","cycling","dogs","food","hiking","jazz","vinyl","gaming","photography","design","travel","cooking","fitness","tech","poetry","theatre","yoga","climbing","skateboarding","night runs","street food"];
 
 const DEFAULT_PRESETS=[
@@ -934,6 +939,280 @@ function BottomNav({tab,setTab,currentUser}){
   </div>);
 }
 
+// ── NOTE HELPERS ──────────────────────────────────────────────────────────────
+function makeNote({text,tags,visibility,placedPos}){
+  var now=Date.now();
+  return{
+    id:Math.random().toString(36).slice(2),
+    text,tags,visibility,
+    createdAt:now,
+    expiresAt:now+NOTE_EXPIRE_DAYS*24*60*60*1000,
+    placed:!!placedPos,
+    placedPos:placedPos||null,
+  };
+}
+function noteDaysLeft(note){
+  return Math.max(0,Math.ceil((note.expiresAt-Date.now())/(24*60*60*1000)));
+}
+function noteOpacity(note){
+  var daysLeft=noteDaysLeft(note);
+  if(daysLeft>NOTE_FADE_DAYS)return 1;
+  return 0.3+0.7*(daysLeft/NOTE_FADE_DAYS);
+}
+
+// ── ENVELOPE MAP ICON ─────────────────────────────────────────────────────────
+function EnvelopeMarker({note,x,y,onClick}){
+  var op=noteOpacity(note);
+  var W=22,H=16;
+  return(
+    <g onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:op}} transform={`translate(${x-W/2},${y-H/2})`}>
+      <rect x={0} y={0} width={W} height={H} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="1"/>
+      {/* Envelope flap */}
+      <polyline points={`0,0 ${W/2},${H*0.55} ${W},0`} fill="none" stroke={INK} strokeWidth="1.2"/>
+      {/* Envelope bottom crease lines */}
+      <line x1={0} y1={H} x2={W/2} y2={H*0.55} stroke={INK} strokeWidth="0.8"/>
+      <line x1={W} y1={H} x2={W/2} y2={H*0.55} stroke={INK} strokeWidth="0.8"/>
+    </g>
+  );
+}
+
+// ── NOTE PAPER ────────────────────────────────────────────────────────────────
+function NotePaper({note,onClose,compact=false}){
+  var daysLeft=noteDaysLeft(note);
+  var fading=daysLeft<=NOTE_FADE_DAYS;
+  var lines=[];
+  // Ruled lines on paper
+  var lineCount=compact?5:8;
+  for(var i=0;i<lineCount;i++)lines.push(i);
+
+  return(
+    <div style={{
+      background:NOTE_BG,
+      border:"1.5px solid "+INK,
+      boxShadow:"3px 3px 0 "+INK,
+      padding:compact?"14px 16px":"24px 22px",
+      position:"relative",
+      fontFamily:font,
+      width:"100%",
+      boxSizing:"border-box",
+    }}>
+      {/* Ruled lines */}
+      {lines.map(i=>(
+        <div key={i} style={{
+          position:"absolute",left:compact?16:22,right:compact?16:22,
+          top:(compact?38:58)+i*(compact?22:26),
+          height:1,background:INK_LIGHT,opacity:0.35,
+        }}/>
+      ))}
+      {/* Red margin line */}
+      <div style={{position:"absolute",left:compact?38:48,top:0,bottom:0,width:1,background:"#c9a0a0",opacity:0.4}}/>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:compact?10:16,position:"relative"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:7,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>
+            {note.visibility.toUpperCase()}
+          </span>
+          {note.tags.length>0&&<span style={{fontSize:7,color:INK_LIGHT,letterSpacing:1}}>
+            {note.tags.slice(0,3).join(" · ")}
+          </span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {fading&&<span style={{fontSize:7,color:"#8a6a4a",fontWeight:700,letterSpacing:1}}>
+            {daysLeft}d left
+          </span>}
+          {onClose&&<button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:INK_MID,padding:0,lineHeight:1}}>×</button>}
+        </div>
+      </div>
+      {/* Note text */}
+      <div style={{
+        fontSize:compact?13:15,
+        lineHeight:compact?1.65:1.7,
+        color:INK,
+        fontStyle:"italic",
+        position:"relative",
+        minHeight:compact?44:80,
+        paddingLeft:compact?18:24,
+      }}>
+        {note.text||<span style={{color:INK_LIGHT}}>empty note</span>}
+      </div>
+      {/* Drawing stub — reserved for future */}
+      {!compact&&(
+        <div style={{
+          marginTop:16,paddingTop:12,
+          borderTop:"1px dashed "+INK_LIGHT,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          minHeight:60,color:INK_LIGHT,fontSize:9,
+          fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",
+          position:"relative",
+        }}>
+          Drawing — coming soon
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── COMPOSE VIEW ──────────────────────────────────────────────────────────────
+function NoteCompose({onFinish,onCancel}){
+  var [text,setText]=useState("");
+  var [tags,setTags]=useState([]);
+  var [visibility,setVisibility]=useState("open");
+  var [tagInput,setTagInput]=useState("");
+  var inputRef=useRef(null);
+  var remaining=NOTE_MAX_CHARS-text.length;
+  var canFinish=text.trim().length>0;
+
+  function addTag(t){
+    var c=t.trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+    if(!c||tags.includes(c)||tags.length>=6)return;
+    setTags(p=>[...p,c]);setTagInput("");
+  }
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      {/* Header */}
+      <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <button onClick={onCancel} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,padding:0}}>←</button>
+        <span style={{fontWeight:900,fontSize:11,letterSpacing:2,textTransform:"uppercase",color:INK}}>New Note</span>
+        <button onClick={()=>{if(canFinish)onFinish({text:text.trim(),tags,visibility});}} style={{background:canFinish?INK:"none",color:canFinish?NOTE_BG:INK_LIGHT,border:"1.5px solid "+(canFinish?INK:INK_LIGHT),fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:canFinish?"pointer":"default",padding:"6px 12px"}}>
+          Finish
+        </button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:16}}>
+        {/* Paper */}
+        <div style={{background:NOTE_BG,border:"1.5px solid "+INK,boxShadow:"3px 3px 0 "+INK,padding:"20px 18px",position:"relative",boxSizing:"border-box"}}>
+          {/* Ruled lines */}
+          {[0,1,2,3,4,5].map(i=>(
+            <div key={i} style={{position:"absolute",left:18,right:18,top:52+i*26,height:1,background:INK_LIGHT,opacity:0.35}}/>
+          ))}
+          {/* Red margin */}
+          <div style={{position:"absolute",left:44,top:0,bottom:0,width:1,background:"#c9a0a0",opacity:0.4}}/>
+          {/* Char count */}
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10,position:"relative"}}>
+            <span style={{fontSize:8,color:remaining<20?"#8a3a3a":INK_LIGHT,fontWeight:700,letterSpacing:1}}>{remaining}</span>
+          </div>
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={e=>{if(e.target.value.length<=NOTE_MAX_CHARS)setText(e.target.value);}}
+            placeholder="leave your mark..."
+            rows={5}
+            style={{
+              width:"100%",background:"none",border:"none",outline:"none",
+              fontFamily:font,fontSize:15,color:INK,lineHeight:1.7,
+              resize:"none",fontStyle:"italic",
+              paddingLeft:24,boxSizing:"border-box",
+              position:"relative",
+            }}
+            autoFocus
+          />
+          {/* Drawing stub */}
+          <div style={{marginTop:12,paddingTop:10,borderTop:"1px dashed "+INK_LIGHT,display:"flex",alignItems:"center",justifyContent:"center",minHeight:52,color:INK_LIGHT,fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>
+            Drawing — coming soon
+          </div>
+        </div>
+
+        {/* Visibility */}
+        <div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Visibility</div>
+          <div style={{display:"flex",border:"1.5px solid "+INK}}>
+            {["open","closed","hidden"].map((v,i)=>{
+              var sel=visibility===v;
+              return(
+                <button key={v} onClick={()=>setVisibility(v)} style={{flex:1,padding:"10px 0",background:sel?INK:NOTE_BG,color:sel?NOTE_BG:INK,border:"none",borderRight:i<2?"1px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>
+                  {v}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Tags <span style={{fontWeight:400,color:INK_LIGHT}}>(optional, max 6)</span></div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+            {tags.map(t=>(
+              <div key={t} onClick={()=>setTags(p=>p.filter(x=>x!==t))} style={{border:"1.5px solid "+INK,padding:"5px 10px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK,cursor:"pointer",background:NOTE_BG,display:"flex",alignItems:"center",gap:6}}>
+                {t} <span style={{color:INK_LIGHT,fontSize:11}}>×</span>
+              </div>
+            ))}
+          </div>
+          {tags.length<6&&(
+            <div style={{display:"flex",gap:8}}>
+              <input value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:14,color:INK,padding:"4px 0"}}/>
+              <button onClick={()=>addTag(tagInput)} style={{background:INK,color:NOTE_BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1}}>+</button>
+            </div>
+          )}
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:10}}>
+            {TAG_SUGGESTIONS.filter(s=>!tags.includes(s)).slice(0,10).map(s=>(
+              <div key={s} onClick={()=>addTag(s)} style={{border:"1px dashed "+INK_LIGHT,padding:"5px 10px",fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",color:INK_MID,background:NOTE_BG}}>{s}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── NOTES PANEL ───────────────────────────────────────────────────────────────
+function NotesPanel({notes,onClose,onCompose,onPlace,onReadNote}){
+  var unplaced=notes.filter(n=>!n.placed);
+  var canCompose=unplaced.length<NOTE_MAX_UNPLACED;
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontWeight:900,fontSize:11,letterSpacing:2,textTransform:"uppercase",color:INK}}>Notes</span>
+        <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,padding:0}}>×</button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+        {/* Compose button */}
+        <button onClick={()=>{if(canCompose)onCompose();}} style={{
+          width:"100%",background:canCompose?INK:INK_LIGHT,color:canCompose?NOTE_BG:BG,
+          border:"none",padding:"12px 0",fontFamily:font,fontWeight:700,
+          fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:canCompose?"pointer":"default",
+        }}>
+          {canCompose?`+ New Note`:`Full (${NOTE_MAX_UNPLACED}/${NOTE_MAX_UNPLACED})`}
+        </button>
+
+        {unplaced.length===0&&(
+          <div style={{textAlign:"center",padding:"32px 0",color:INK_LIGHT,fontSize:11,fontStyle:"italic"}}>
+            No unplaced notes yet.
+          </div>
+        )}
+
+        {unplaced.map(note=>(
+          <div key={note.id}>
+            <NotePaper note={note} compact={true}/>
+            <button onClick={()=>onPlace(note)} style={{
+              width:"100%",background:"none",border:"1.5px solid "+INK,borderTop:"none",
+              padding:"10px 0",fontFamily:font,fontWeight:700,fontSize:9,
+              letterSpacing:2,textTransform:"uppercase",cursor:"pointer",color:INK,
+            }}>
+              Place on Map →
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── READ NOTE MODAL ───────────────────────────────────────────────────────────
+function ReadNoteModal({note,onClose}){
+  return(
+    <Portal>
+      <div style={{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(10,10,10,0.5)",padding:"24px"}} onClick={onClose}>
+        <div style={{width:"100%",maxWidth:340}} onClick={e=>e.stopPropagation()}>
+          <NotePaper note={note} onClose={onClose}/>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
@@ -943,6 +1222,13 @@ export default function App(){
   },[]);
   var [currentUser,setCurrentUser]=useState(null);
   var [tab,setTab]=useState("map");
+  var [notes,setNotes]=useState([]);
+  var [notesPanelOpen,setNotesPanelOpen]=useState(false);
+  var [notesView,setNotesView]=useState("list"); // "list" | "compose"
+  var [placingNote,setPlacingNote]=useState(null); // note waiting to be placed
+  var placingNoteRef=useRef(null);
+  function setPlacingNoteSync(v){placingNoteRef.current=v;setPlacingNote(v);}
+  var [readingNote,setReadingNote]=useState(null);
   var [radius,setRadius]=useState(null);
   var [drawPhase,setDrawPhase]=useState("idle");
   var drawPhaseRef=useRef("idle");
@@ -1164,6 +1450,13 @@ export default function App(){
   const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(38));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
   const onMapDown=useCallback((e)=>{
+    // Note placement mode — tap anywhere to place
+    if(placingNoteRef.current){
+      var c0=e.touches?e.touches[0]:e;
+      if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();
+      placeNoteRef.current(toSVG(c0.clientX,c0.clientY));
+      return;
+    }
     if(drawPhaseRef.current==="idle"){onDrawStart(e);return;}
     if(drawPhaseRef.current==="drawing")return;
     if(drawPhaseRef.current==="done"){
@@ -1212,6 +1505,28 @@ export default function App(){
   },[onDrawEnd,cancelPlantHold]);
 
   function resetRadius(){setDrawPhaseSync("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);setPanX(0);setPanY(0);}
+
+  function finishNote(data){
+    var note=makeNote({text:data.text,tags:data.tags,visibility:data.visibility});
+    setNotes(prev=>[...prev,note]);
+    setNotesView("list");
+  }
+
+  function startPlacingNote(note){
+    setNotesPanelOpen(false);
+    setPlacingNoteSync(note);
+  }
+
+  var placeNoteRef=useRef(null);
+  function placeNote(svgPos){
+    var pn=placingNoteRef.current;
+    if(!pn)return;
+    // TODO: replace with GPS confirmation in production
+    // For demo: tap on map places the note at that position
+    setNotes(prev=>prev.map(n=>n.id===pn.id?{...n,placed:true,placedPos:{x:svgPos.x-panX,y:svgPos.y-panY}}:n));
+    setPlacingNoteSync(null);
+  }
+  placeNoteRef.current=placeNote;
 
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
@@ -1320,6 +1635,12 @@ export default function App(){
             {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
             {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
             {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} panX={panX} panY={panY}/>)}
+            {/* Placed note envelopes */}
+            <g transform={`translate(${panX},${panY})`}>
+              {notes.filter(n=>n.placed&&n.placedPos).map(n=>(
+                <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={setReadingNote}/>
+              ))}
+            </g>
           </g>
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
           <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
@@ -1329,9 +1650,80 @@ export default function App(){
         {(panX!==0||panY!==0)&&(
           <button onClick={()=>{setPanX(0);setPanY(0);}} title="Return to me" style={{position:"absolute",bottom:14,left:14,width:36,height:36,background:BG,border:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",zIndex:40,boxShadow:"1px 1px 0 "+INK_LIGHT,fontFamily:font,fontSize:14,lineHeight:1}}>◎</button>
         )}
+
+        {/* Notes side tab */}
+        {!notesPanelOpen&&!placingNote&&(
+          <button onClick={()=>{setNotesPanelOpen(true);setNotesView("list");}} style={{
+            position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",
+            background:NOTE_BG,border:"1.5px solid "+INK,borderRight:"none",
+            width:28,padding:"14px 0",cursor:"pointer",zIndex:50,
+            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
+            boxShadow:"-1px 1px 0 "+INK_LIGHT,
+          }}>
+            {/* Paper pad icon */}
+            <svg width={16} height={18} viewBox="0 0 16 18">
+              <rect x={1} y={2} width={14} height={15} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="0.5"/>
+              <rect x={5} y={0} width={2} height={4} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="0.5"/>
+              <rect x={9} y={0} width={2} height={4} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="0.5"/>
+              <line x1={4} y1={8} x2={12} y2={8} stroke={INK} strokeWidth="1" strokeLinecap="round"/>
+              <line x1={4} y1={11} x2={12} y2={11} stroke={INK} strokeWidth="1" strokeLinecap="round"/>
+              <line x1={4} y1={14} x2={9} y2={14} stroke={INK} strokeWidth="1" strokeLinecap="round"/>
+            </svg>
+            {notes.filter(n=>!n.placed).length>0&&(
+              <div style={{width:14,height:14,borderRadius:"50%",background:INK,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:8,fontWeight:900,color:NOTE_BG,lineHeight:1}}>{notes.filter(n=>!n.placed).length}</span>
+              </div>
+            )}
+          </button>
+        )}
+
+        {/* Notes slide panel */}
+        <div style={{
+          position:"absolute",top:0,right:0,bottom:0,
+          width:"88%",maxWidth:320,
+          background:BG,borderLeft:"2px solid "+INK,
+          transform:notesPanelOpen?"translateX(0)":"translateX(100%)",
+          transition:"transform 0.3s cubic-bezier(0.22,1,0.36,1)",
+          zIndex:60,display:"flex",flexDirection:"column",
+          boxShadow:notesPanelOpen?"-4px 0 0 "+INK_LIGHT:"none",
+          pointerEvents:notesPanelOpen?"auto":"none",
+        }}>
+          {notesView==="list"&&(
+            <NotesPanel
+              notes={notes}
+              onClose={()=>setNotesPanelOpen(false)}
+              onCompose={()=>setNotesView("compose")}
+              onPlace={startPlacingNote}
+              onReadNote={setReadingNote}
+            />
+          )}
+          {notesView==="compose"&&(
+            <NoteCompose
+              onFinish={finishNote}
+              onCancel={()=>setNotesView("list")}
+            />
+          )}
+        </div>
+
+        {/* Placement mode banner */}
+        {placingNote&&(
+          <div style={{
+            position:"absolute",top:0,left:0,right:0,zIndex:70,
+            background:INK,color:NOTE_BG,
+            padding:"10px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",
+            fontFamily:font,
+          }}>
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Tap map to place note</span>
+            <button onClick={()=>setPlacingNoteSync(null)} style={{background:"none",border:"1px solid "+NOTE_BG,color:NOTE_BG,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"4px 10px"}}>Cancel</button>
+          </div>
+        )}
+
         {mapDimProgress>0&&<div style={{position:"absolute",inset:0,background:INK,opacity:mapDimProgress,pointerEvents:"none",transition:"opacity 0.08s"}}/>}
       </div>
     </div>)}
+
+    {/* Read note modal — available on any tab */}
+    {readingNote&&<ReadNoteModal note={readingNote} onClose={()=>setReadingNote(null)}/>}
 
     {tab==="circles"&&(<div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain"}}>
       {!hasRadius&&<div style={{padding:"32px 18px",color:INK_MID,fontSize:13,fontStyle:"italic",textAlign:"center"}}>Draw your circle on the map first.</div>}
