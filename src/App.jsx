@@ -1025,7 +1025,7 @@ export default function App(){
   const startPulseHold=useCallback((e)=>{if(pulseState!=="idle")return;var el=e.currentTarget.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;setTouchPt({x:((cx-el.left)/el.width)*128,y:((cy-el.top)/el.width)*128});pulseHoldStart.current=performance.now();setPulseState("charging");function tick(){var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);setHoldProgress(p);if(p<1){pulseHoldRaf.current=requestAnimationFrame(tick);}}pulseHoldRaf.current=requestAnimationFrame(tick);},[pulseState]);
   const cancelPulseHold=useCallback(()=>{if(pulseState!=="charging")return;cancelAnimationFrame(pulseHoldRaf.current);var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);if(p>=.8){firePulse();}else{setPulseState("idle");setHoldProgress(0);}},[pulseState,firePulse]);
 
-  function toSVG(cx,cy){if(!svgRef.current)return{x:0,y:0};var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();var scale=350/rect.width;return{x:(cx-rect.left)*scale,y:(cy-rect.top)*scale};}
+  function toSVG(cx,cy){if(!svgRef.current)return{x:0,y:0};var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();return{x:(cx-rect.left)*(350/rect.width),y:(cy-rect.top)*(420/rect.height)};}
 
   const onDrawStart=useCallback((e)=>{e.preventDefault();if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();setDrawPhase("drawing");setDrawPath([]);setLiveRadius(0);},[]);
   const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
@@ -1074,7 +1074,7 @@ export default function App(){
     if(dragging.current&&svgRef.current){
       e.preventDefault();
       var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();
-      var scale2=350/rect.width;var dx=(c.clientX-rect.left)*scale2-CX,dy=(c.clientY-rect.top)*scale2-CY;
+      var dx=(c.clientX-rect.left)*(350/rect.width)-CX,dy=(c.clientY-rect.top)*(420/rect.height)-CY;
       setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
       return;
     }
@@ -1183,7 +1183,7 @@ export default function App(){
 
       {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
       <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
-        <svg ref={svgRef} viewBox="0 0 350 420" width="100%" style={{display:"block",flex:1,touchAction:"none"}}
+        <svg ref={svgRef} viewBox="0 0 350 420" width="100%" preserveAspectRatio="none" style={{display:"block",flex:1,touchAction:"none"}}
           onMouseDown={onMapDown} onMouseMove={onMapMove} onMouseUp={onMapUp}
           onTouchStart={onMapDown} onTouchMove={onMapMove} onTouchEnd={onMapUp}>
           <CityMapLayer panX={panX} panY={panY}/>
