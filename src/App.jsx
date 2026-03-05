@@ -1232,24 +1232,12 @@ function ReadNoteModal({note,onClose}){
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;}html,body{overflow-x:hidden;width:100%;height:100%;min-height:-webkit-fill-available;}#root{height:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}20%{transform:translate(var(--ex),var(--ey)) rotate(-6deg);}40%{transform:translate(var(--ex),var(--ey)) rotate(5deg);}60%{transform:translate(var(--ex),var(--ey)) rotate(-3deg);}80%{transform:translate(var(--ex),var(--ey)) rotate(2deg);}100%{transform:translate(var(--ex),var(--ey)) rotate(0deg);}}";
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}";
     document.head.appendChild(s);
     return()=>s.remove();
   },[]);
 
-  // Fix iOS keyboard dismiss layout shift — when visualViewport resizes (keyboard
-  // appears/disappears) scroll window back to 0,0 so the app doesn't stay shifted.
-  useEffect(()=>{
-    function resetScroll(){window.scrollTo(0,0);}
-    if(window.visualViewport){
-      window.visualViewport.addEventListener("resize",resetScroll);
-      window.visualViewport.addEventListener("scroll",resetScroll);
-      return()=>{
-        window.visualViewport.removeEventListener("resize",resetScroll);
-        window.visualViewport.removeEventListener("scroll",resetScroll);
-      };
-    }
-  },[]);
+  // iOS keyboard handling is managed via position:fixed on html/body in global styles
   var [currentUser,setCurrentUser]=useState(null);
   var [tab,setTab]=useState("map");
   var [notes,setNotes]=useState([]);
@@ -1574,7 +1562,7 @@ export default function App(){
   var outerShell={background:BG_OUTER,minHeight:"100%",display:"flex",flexDirection:"column",alignItems:"stretch",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%",flex:1};
   var phoneCard={background:BG,width:"100%",flex:1,display:"flex",flexDirection:"column",position:"relative",boxSizing:"border-box"};
 
-  if(!currentUser)return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
+  if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
 
   var visibleChats=radius?allChats.filter(c=>{
     if(c.type==="hidden")return false;
@@ -1598,7 +1586,7 @@ export default function App(){
   var chatColor=selectedChat?(DRAFT_COLORS[selectedChat.id]||INK):INK;
   var isDemo=selectedChat?.governance?.mode==="democracy";
 
-  return(<div key="shell" style={outerShell}><div key="card" style={phoneCard}>
+  return(<div style={outerShell}><div style={phoneCard}>
     {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
     {showPersonCard&&nearbyUser&&<PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson}/>}
     {showCircleCard&&nearbyCircle&&<CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle}/>}
