@@ -647,19 +647,20 @@ function FistIcon({size=12,color=INK}){var lo=color===BG||color==="white"?"rgba(
 function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,lensReveal}){
   var R=10,color=DRAFT_COLORS[chat.id]||INK;
   var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
-  // lensReveal: 0=outside lens (dim), 1=inside lens (lit)
-  // If no lens drawn yet, everything shows at full opacity
   var hasLens=radius!==null&&radius!==undefined;
-  var inLens=!hasLens||(chat.r<=radius);
-  var lr=lensReveal||0;
-  // Outside lens: fade to 0.15. Inside lens: bright pop with slight glow ring
-  var baseOp=hasLens?(inLens?1:0.15):1;
+  var lr=lensReveal||0; // 0=outside, 1=inside — animated
+
+  // Everything driven from lr so opacity and glow are always in sync
+  // No lens: full opacity. Has lens: lerp from 0.15 (outside) to 1.0 (inside)
+  var baseOp=hasLens?(0.15+0.85*lr):1;
+  var glowOp=hasLens?lr*0.4:0;
+  var glowR=R+4+lr*4;
 
   if(chat.type==="hidden"){
     if(!revealProgress||revealProgress<=0)return null;
     var rp=revealProgress,sh=0.4+0.6*Math.sin(rp*Math.PI),hatch=[];
     for(var i=-R;i<=R;i+=3.5){var hw=Math.sqrt(Math.max(0,R*R-i*i));hatch.push(<line key={i} x1={x-hw} y1={y+i} x2={x+hw} y2={y+i} stroke={color} strokeWidth="0.7" opacity={0.45*rp}/>);}
-    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp*baseOp}}>
+    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp}}>
       <circle cx={x} cy={y} r={22} fill="transparent"/>
       <circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/>
       <clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath>
@@ -669,19 +670,15 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,lensRe
     </g>);
   }
 
-  // DS-style lens pop: when inLens, add a soft glow ring that fades in
-  var glowOp=hasLens&&inLens?lr*0.35:0;
-  var glowR=R+5+lr*3;
-
-  return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition:"opacity 0.3s"}}>
+  return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp}}>
     <circle cx={x} cy={y} r={22} fill="transparent"/>
-    {/* Lens glow ring — DS illuminate effect */}
-    {hasLens&&inLens&&<circle cx={x} cy={y} r={glowR} fill="none" stroke={color} strokeWidth="2.5" opacity={glowOp}/>}
+    {/* DS glow ring — scales and fades with lr */}
+    {hasLens&&<circle cx={x} cy={y} r={glowR} fill="none" stroke={color} strokeWidth="2.5" opacity={glowOp}/>}
     {highlighted&&<circle cx={x} cy={y} r={R+10} fill="none" stroke={color} strokeWidth="1.5" opacity={0.6} strokeDasharray="3 3"/>}
     {highlighted&&<circle cx={x} cy={y} r={R+18} fill="none" stroke={color} strokeWidth="0.8" opacity={0.25} strokeDasharray="2 4"/>}
     {chat.type==="open"&&<circle cx={x} cy={y} r={R} fill={color}/>}
     {chat.type==="closed"&&<circle cx={x} cy={y} r={R} fill={BG} stroke={color} strokeWidth="2"/>}
-    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inLens||!hasLens?1:0.15}>{chat.name.toUpperCase()}</text>
+    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={hasLens?lr:1}>{chat.name.toUpperCase()}</text>
   </g>);
 }
 
