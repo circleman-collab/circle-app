@@ -940,11 +940,12 @@ function BottomNav({tab,setTab,currentUser}){
 }
 
 // ── NOTE HELPERS ──────────────────────────────────────────────────────────────
-function makeNote({text,tags,visibility,placedPos}){
+function makeNote({text,tags,visibility,placedPos,ownerId}){
   var now=Date.now();
   return{
     id:Math.random().toString(36).slice(2),
     text,tags,visibility,
+    ownerId:ownerId||"user_local",
     createdAt:now,
     expiresAt:now+NOTE_EXPIRE_DAYS*24*60*60*1000,
     placed:!!placedPos,
@@ -961,7 +962,7 @@ function noteOpacity(note){
 }
 
 // ── ENVELOPE MAP ICON ─────────────────────────────────────────────────────────
-function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,revealed=false}){
+function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,revealed=false,isOwn=false}){
   var baseOp=noteOpacity(note);
   var W=26,H=18;
   var hasLens=radius!==null&&radius!==undefined;
@@ -979,17 +980,30 @@ function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,re
 
   var isHidden=note.visibility==="hidden";
   var isClosed=note.visibility==="closed";
-  var sw=0.8; // thinner strokes throughout
-  var fillColor=NOTE_BG;
-  var strokeColor=INK;
-  var stampStyle=stamping?{animation:"noteStamp 0.6s cubic-bezier(0.22,1,0.36,1)",transformOrigin:"0px 0px"}:{};
+  var sw=0.8;
+  var animStyle={animation:wiggling?"envelopeWiggle 0.4s ease":stamping?"noteStamp 0.6s cubic-bezier(0.22,1,0.36,1)":"none",transformOrigin:"0px 0px"};
 
-  // Hidden notes show as crumpled paper icon before revealed
+  // Own hidden note — ghost envelope, always visible to owner
+  if(isHidden&&!revealed&&isOwn){
+    return(
+      <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:0.35}}>
+        <g style={animStyle}>
+          <rect x={-W/2} y={-H/2} width={W} height={H} fill="none" stroke={INK} strokeWidth={sw} strokeDasharray="3 2" rx="1"/>
+          <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={INK} strokeWidth={sw}/>
+          <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
+          <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
+          {/* Ghost label */}
+          <text x={0} y={H/2+8} textAnchor="middle" fontSize="5" fill={INK} fontFamily={font} letterSpacing="1" opacity="0.6">HIDDEN</text>
+        </g>
+      </g>
+    );
+  }
+
+  // Hidden not-yet-revealed (and not own) — crumpled paper
   if(isHidden&&!revealed){
     return(
       <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:0.7}}>
-        <g style={stampStyle}>
-          {/* Crumpled paper — irregular polygon */}
+        <g style={animStyle}>
           <polygon points="-9,-7 -5,-10 2,-9 9,-6 10,2 7,9 0,8 -8,6 -10,0 -7,-5" fill={NOTE_BG} stroke={INK} strokeWidth={sw} strokeDasharray="2 2" opacity="0.6"/>
           <line x1={-4} y1={-3} x2={4} y2={-1} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.5"/>
           <line x1={-5} y1={1} x2={3} y2={3} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.5"/>
@@ -1000,31 +1014,26 @@ function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,re
 
   return(
     <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:op,transition:"opacity 0.25s ease"}}>
-      <g style={{animation:wiggling?"envelopeWiggle 0.4s ease":stamping?"noteStamp 0.6s cubic-bezier(0.22,1,0.36,1)":"none",transformOrigin:"0px 0px"}}>
+      <g style={animStyle}>
         {/* Envelope body */}
-        <rect x={-W/2} y={-H/2} width={W} height={H} fill={fillColor} stroke={strokeColor} strokeWidth={sw} rx="1"
-          strokeDasharray={isHidden?"3 2":isClosed?"none":"none"}
+        <rect x={-W/2} y={-H/2} width={W} height={H} fill={NOTE_BG} stroke={INK} strokeWidth={sw} rx="1"
+          strokeDasharray={isHidden?"3 2":"none"}
           opacity={isHidden?0.75:1}
         />
-        {/* Flap — open = open flap, closed = sealed flat */}
+        {/* Flap */}
         {!isClosed&&!isHidden&&(
-          <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={strokeColor} strokeWidth={sw}/>
+          <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={INK} strokeWidth={sw}/>
         )}
         {(isClosed||isHidden)&&(
-          // Sealed flap — straight line across top
-          <line x1={-W/2} y1={-H/2} x2={W/2} y2={-H/2} stroke={strokeColor} strokeWidth={sw}/>
+          <line x1={-W/2} y1={-H/2} x2={W/2} y2={-H/2} stroke={INK} strokeWidth={sw}/>
         )}
         {/* Bottom creases */}
-        <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={strokeColor} strokeWidth={sw*0.7}/>
-        <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={strokeColor} strokeWidth={sw*0.7}/>
-        {/* Wax seal — only on closed/hidden */}
-        {(isClosed||isHidden)&&(
-          <g>
-            <circle cx={0} cy={H*0.12} r={3.2} fill={INK} opacity="0.85"/>
-            <circle cx={0} cy={H*0.12} r={1.8} fill="none" stroke={NOTE_BG} strokeWidth="0.6"/>
-          </g>
-        )}
-        {/* Hidden dashed overlay ring */}
+        <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
+        <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
+        {/* Wax seal — all types, smaller on open */}
+        <circle cx={0} cy={isClosed||isHidden?H*0.12:0} r={isClosed||isHidden?3.2:2.2} fill={INK} opacity={isClosed||isHidden?0.85:0.5}/>
+        <circle cx={0} cy={isClosed||isHidden?H*0.12:0} r={isClosed||isHidden?1.8:1.2} fill="none" stroke={NOTE_BG} strokeWidth="0.6"/>
+        {/* Hidden dashed ring */}
         {isHidden&&(
           <ellipse cx={0} cy={0} rx={W/2+3} ry={H/2+3} fill="none" stroke={INK} strokeWidth="0.5" strokeDasharray="2 3" opacity="0.4"/>
         )}
@@ -1034,7 +1043,7 @@ function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,re
 }
 
 // ── NOTE PAPER ────────────────────────────────────────────────────────────────
-function NotePaper({note,onClose,compact=false}){
+function NotePaper({note,onClose,compact=false,smoothed=false}){
   var daysLeft=noteDaysLeft(note);
   var fading=daysLeft<=NOTE_FADE_DAYS;
   var lines=[];
@@ -1105,6 +1114,17 @@ function NotePaper({note,onClose,compact=false}){
           Drawing — coming soon
         </div>
       )}
+      {/* Residual crinkle marks — only for smoothed hidden notes */}
+      {smoothed&&(()=>{
+        var seed=note.id.charCodeAt(0)+(note.id.charCodeAt(1)||7);
+        var marks=[];
+        for(var i=0;i<6;i++){
+          var x1=((seed*17+i*31)%160)+20,y1=((seed*13+i*23)%180)+30;
+          var x2=x1+((seed*7+i*19)%30)-15,y2=y1+((seed*11+i*37)%30)-15;
+          marks.push(<div key={i} style={{position:"absolute",left:x1+"%",top:y1*0.4+"%",width:((seed*3+i*11)%40)+20,height:1,background:INK_LIGHT,opacity:0.18,transform:`rotate(${((seed+i*7)%30)-15}deg)`,transformOrigin:"left center"}}/>);
+        }
+        return marks;
+      })()}
     </div>
   );
 }
@@ -1258,12 +1278,12 @@ function NotesPanel({notes,onClose,onCompose,onPlace,onReadNote}){
 }
 
 // ── READ NOTE MODAL ───────────────────────────────────────────────────────────
-function ReadNoteModal({note,onClose}){
+function ReadNoteModal({note,onClose,smoothed=false}){
   return(
     <Portal>
       <div style={{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(10,10,10,0.5)",padding:"24px"}} onClick={onClose}>
         <div style={{width:"100%",maxWidth:340}} onClick={e=>e.stopPropagation()}>
-          <NotePaper note={note} onClose={onClose}/>
+          <NotePaper note={note} onClose={onClose} smoothed={smoothed}/>
         </div>
       </div>
     </Portal>
@@ -1272,93 +1292,82 @@ function ReadNoteModal({note,onClose}){
 
 // ── CRUMPLED NOTE REVEAL ──────────────────────────────────────────────────────
 function CrumpledNoteReveal({note,onSmoothed,onCancel}){
-  var [progress,setProgress]=useState(0); // 0-1 smoothness
-  var [strokes,setStrokes]=useState([]); // smoothed regions
+  var [progress,setProgress]=useState(0);
   var svgRef=useRef(null);
   var drawing=useRef(false);
-  var THRESHOLD=0.72;
+  var totalPoints=useRef(0);
+  var THRESHOLD=0.55;
 
-  function getPos(e){
-    var c=e.touches?e.touches[0]:e;
-    var rect=svgRef.current.getBoundingClientRect();
-    return{x:(c.clientX-rect.left)/rect.width*200,y:(c.clientY-rect.top)/rect.height*260};
+  var seed=note.id.charCodeAt(0)+(note.id.charCodeAt(1)||7);
+  var crinkleLines=[];
+  for(var i=0;i<14;i++){
+    var x1=((seed*17+i*31)%170)+15,y1=((seed*13+i*23)%220)+15;
+    var x2=x1+((seed*7+i*19)%50)-25,y2=y1+((seed*11+i*37)%50)-25;
+    crinkleLines.push({x1,y1,x2:Math.max(8,Math.min(192,x2)),y2:Math.max(8,Math.min(252,y2)),op:0.3+((seed*i*3)%10)/30});
   }
 
-  function onStart(e){drawing.current=true;var p=getPos(e);setStrokes(s=>[...s,[p]]);}
+  function onStart(e){e.preventDefault();drawing.current=true;}
   function onMove(e){
     if(!drawing.current)return;
     e.preventDefault();
-    var p=getPos(e);
-    setStrokes(s=>{var n=[...s];n[n.length-1]=[...n[n.length-1],p];return n;});
-    // Estimate coverage by stroke length
-    var total=strokes.reduce((acc,s)=>acc+s.length,0)+1;
-    var np=Math.min(1,total/180);
+    totalPoints.current+=1;
+    var np=Math.min(1,totalPoints.current/90);
     setProgress(np);
-    if(np>=THRESHOLD)setTimeout(()=>onSmoothed(note),300);
+    if(np>=THRESHOLD)setTimeout(()=>onSmoothed(note),350);
   }
   function onEnd(){drawing.current=false;}
 
-  // Crumple lines — random but seeded by note id
-  var seed=note.id.charCodeAt(0)+note.id.charCodeAt(1);
-  var crumpleLines=[];
-  for(var i=0;i<12;i++){
-    var x1=((seed*17+i*31)%180)+10,y1=((seed*13+i*23)%240)+10;
-    var x2=x1+((seed*7+i*19)%60)-30,y2=y1+((seed*11+i*37)%60)-30;
-    crumpleLines.push({x1,y1,x2:Math.max(5,Math.min(195,x2)),y2:Math.max(5,Math.min(255,y2))});
-  }
+  var distort=1-progress;
+  var blurAmt=(distort*6).toFixed(1);
+  var skewX=(distort*8-4).toFixed(1);
+  var skewY=(distort*3).toFixed(1);
+  var smoothed=progress>=THRESHOLD;
 
-  var smoothOpacity=Math.min(1,progress/THRESHOLD);
+  var words=(note.text||"").split(" ");
+  var lines=[];var cur="";
+  words.forEach(w=>{if((cur+" "+w).length>22&&cur){lines.push(cur);cur=w;}else cur=cur?cur+" "+w:w;});
+  if(cur)lines.push(cur);
 
   return(
     <Portal>
-      <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(10,10,10,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}} onClick={onCancel}>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:NOTE_BG,opacity:0.7}}>
-            {progress<THRESHOLD?"smooth it out":"✓ smoothed"}
+      <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(10,10,10,0.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}} onClick={onCancel}>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:NOTE_BG,opacity:0.7,height:14}}>
+            {smoothed?"\u2713 smoothed":"smooth it out"}
           </div>
           <svg ref={svgRef} width={200} height={260} viewBox="0 0 200 260"
-            style={{touchAction:"none",cursor:"crosshair",filter:`drop-shadow(2px 3px 0 rgba(0,0,0,0.4))`}}
+            style={{touchAction:"none",cursor:"crosshair",filter:"drop-shadow(2px 3px 0 rgba(0,0,0,0.4))"}}
             onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd}
             onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-            {/* Paper base */}
+            <defs>
+              <filter id="crinkleBlur">
+                <feGaussianBlur stdDeviation={blurAmt}/>
+              </filter>
+            </defs>
             <rect x={0} y={0} width={200} height={260} fill={NOTE_BG} rx="2"/>
-            {/* Crumple fold lines */}
-            {crumpleLines.map((l,i)=>(
-              <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
-                stroke={INK_LIGHT} strokeWidth="0.8" opacity={0.6*(1-smoothOpacity)}/>
+            {[0,1,2,3,4,5].map(i=>(
+              <line key={i} x1={24} y1={62+i*26} x2={176} y2={62+i*26} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.35"/>
             ))}
-            {/* Content obscured by scribble */}
-            <rect x={0} y={0} width={200} height={260} fill={NOTE_BG} opacity={0.9*(1-smoothOpacity)} rx="2"/>
-            {/* Scribble overlay */}
-            {Array.from({length:8}).map((_,i)=>{
-              var ys=20+i*30;
-              return <line key={i} x1={10+((seed*i*3)%20)} y1={ys} x2={180-((seed*i*7)%20)} y2={ys+((seed+i)%8)-4}
-                stroke={INK_LIGHT} strokeWidth="1" opacity={0.35*(1-smoothOpacity)}/>;
-            })}
-            {/* Smooth strokes drawn by user */}
-            {strokes.map((stroke,i)=>(
-              stroke.length>1&&<polyline key={i}
-                points={stroke.map(p=>p.x+","+p.y).join(" ")}
-                fill="none" stroke={NOTE_BG} strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
-            ))}
-            {/* Revealed content underneath */}
-            <g opacity={smoothOpacity}>
-              {[0,1,2,3,4].map(i=>(
-                <line key={i} x1={24} y1={68+i*26} x2={176} y2={68+i*26} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.4"/>
+            <line x1={42} y1={0} x2={42} y2={260} stroke="#c9a0a0" strokeWidth="0.5" opacity="0.3"/>
+            <g filter={distort>0.05?"url(#crinkleBlur)":undefined}
+               transform={"skewX("+skewX+") skewY("+skewY+")"}
+               style={{transformOrigin:"100px 130px"}}>
+              {lines.map((line,i)=>(
+                <text key={i} x={52} y={76+i*26} fontFamily="serif" fontSize="13" fill={INK} fontStyle="italic" opacity={0.5+progress*0.5}>{line}</text>
               ))}
-              <line x1={42} y1={0} x2={42} y2={260} stroke="#c9a0a0" strokeWidth="0.5" opacity="0.35"/>
-              <text x={52} y={82} fontFamily="serif" fontSize="13" fill={INK} fontStyle="italic" opacity="0.9">{note.text?.slice(0,28)}</text>
-              {note.text?.length>28&&<text x={52} y={108} fontFamily="serif" fontSize="13" fill={INK} fontStyle="italic" opacity="0.9">{note.text.slice(28,56)}</text>}
             </g>
+            {crinkleLines.map((l,i)=>(
+              <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke={INK_LIGHT} strokeWidth="0.9" opacity={l.op*(1-progress*0.75)}/>
+            ))}
+            <rect x={0} y={0} width={200*progress} height={2} fill={INK} opacity="0.15" rx="1"/>
           </svg>
-          <button onClick={onCancel} style={{background:"none",border:"1px solid "+NOTE_BG,color:NOTE_BG,fontFamily:font,fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",padding:"8px 20px",cursor:"pointer",opacity:0.6}}>cancel</button>
+          <button onClick={onCancel} style={{background:"none",border:"1px solid "+NOTE_BG,color:NOTE_BG,fontFamily:font,fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",padding:"8px 20px",cursor:"pointer",opacity:0.5}}>cancel</button>
         </div>
       </div>
     </Portal>
   );
 }
 
-// ── UNFOLD MODAL (tap-to-reveal for open/closed) ──────────────────────────────
 function UnfoldModal({note}){
   return(
     <Portal>
@@ -1676,7 +1685,7 @@ export default function App(){
   function resetRadius(){setDrawPhaseSync("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);setPanX(0);setPanY(0);}
 
   function finishNote(data){
-    var note=makeNote({text:data.text,tags:data.tags,visibility:data.visibility});
+    var note=makeNote({text:data.text,tags:data.tags,visibility:data.visibility,ownerId:currentUser?.id||"user_local"});
     setNotes(prev=>[...prev,note]);
     setNotesView("list");
   }
@@ -1869,7 +1878,7 @@ export default function App(){
             {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} panX={panX} panY={panY}/>)}
             {/* Placed note envelopes — already inside pan group, no extra transform needed */}
             {notes.filter(n=>n.placed&&n.placedPos).filter(n=>n.visibility!=="hidden"||revealedNoteIds.has(n.id)).map(n=>(
-              <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={handleNoteClick} radius={radius} panX={panX} panY={panY} stamping={stampingNoteId===n.id} revealed={revealedNoteIds.has(n.id)}/>
+              <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={handleNoteClick} radius={radius} panX={panX} panY={panY} stamping={stampingNoteId===n.id} revealed={revealedNoteIds.has(n.id)} isOwn={n.ownerId===(currentUser?.id||"user_local")}/>
             ))}
           </g>
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
@@ -1953,7 +1962,7 @@ export default function App(){
     </div>)}
 
     {/* Read note modal — available on any tab */}
-    {readingNote&&<ReadNoteModal note={readingNote} onClose={()=>setReadingNote(null)}/>}
+    {readingNote&&<ReadNoteModal note={readingNote} onClose={()=>setReadingNote(null)} smoothed={smoothedNoteIds.has(readingNote.id)}/>}
     {/* Crumpled note smoothing reveal */}
     {crumpledNote&&<CrumpledNoteReveal note={crumpledNote} onSmoothed={handleNoteSmoothed} onCancel={()=>setCrumpledNote(null)}/>}
     {/* Unfold animation before read modal */}
