@@ -961,7 +961,7 @@ function noteOpacity(note){
 }
 
 // ── ENVELOPE MAP ICON ─────────────────────────────────────────────────────────
-function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0}){
+function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,revealed=false}){
   var baseOp=noteOpacity(note);
   var W=26,H=18;
   var hasLens=radius!==null&&radius!==undefined;
@@ -977,16 +977,57 @@ function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0}){
     prevInLens.current=inLens;
   },[inLens]);
 
+  var isHidden=note.visibility==="hidden";
+  var isClosed=note.visibility==="closed";
+  var sw=0.8; // thinner strokes throughout
+  var fillColor=NOTE_BG;
+  var strokeColor=INK;
+  var stampStyle=stamping?{animation:"noteStamp 0.6s cubic-bezier(0.22,1,0.36,1)",transformOrigin:"0px 0px"}:{};
+
+  // Hidden notes show as crumpled paper icon before revealed
+  if(isHidden&&!revealed){
+    return(
+      <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:0.7}}>
+        <g style={stampStyle}>
+          {/* Crumpled paper — irregular polygon */}
+          <polygon points="-9,-7 -5,-10 2,-9 9,-6 10,2 7,9 0,8 -8,6 -10,0 -7,-5" fill={NOTE_BG} stroke={INK} strokeWidth={sw} strokeDasharray="2 2" opacity="0.6"/>
+          <line x1={-4} y1={-3} x2={4} y2={-1} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.5"/>
+          <line x1={-5} y1={1} x2={3} y2={3} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.5"/>
+        </g>
+      </g>
+    );
+  }
+
   return(
     <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:op,transition:"opacity 0.25s ease"}}>
-      <g style={{animation:wiggling?"envelopeWiggle 0.4s ease":"none",transformOrigin:"0px 0px"}}>
-        <rect x={-W/2} y={-H/2} width={W} height={H} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="1"/>
-        <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={INK} strokeWidth="1.2"/>
-        <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth="0.8"/>
-        <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth="0.8"/>
-        {/* Wax seal */}
-        <circle cx={0} cy={H*0.12} r={3.2} fill={INK} opacity="0.85"/>
-        <circle cx={0} cy={H*0.12} r={1.8} fill="none" stroke={NOTE_BG} strokeWidth="0.7"/>
+      <g style={{animation:wiggling?"envelopeWiggle 0.4s ease":stamping?"noteStamp 0.6s cubic-bezier(0.22,1,0.36,1)":"none",transformOrigin:"0px 0px"}}>
+        {/* Envelope body */}
+        <rect x={-W/2} y={-H/2} width={W} height={H} fill={fillColor} stroke={strokeColor} strokeWidth={sw} rx="1"
+          strokeDasharray={isHidden?"3 2":isClosed?"none":"none"}
+          opacity={isHidden?0.75:1}
+        />
+        {/* Flap — open = open flap, closed = sealed flat */}
+        {!isClosed&&!isHidden&&(
+          <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={strokeColor} strokeWidth={sw}/>
+        )}
+        {(isClosed||isHidden)&&(
+          // Sealed flap — straight line across top
+          <line x1={-W/2} y1={-H/2} x2={W/2} y2={-H/2} stroke={strokeColor} strokeWidth={sw}/>
+        )}
+        {/* Bottom creases */}
+        <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={strokeColor} strokeWidth={sw*0.7}/>
+        <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={strokeColor} strokeWidth={sw*0.7}/>
+        {/* Wax seal — only on closed/hidden */}
+        {(isClosed||isHidden)&&(
+          <g>
+            <circle cx={0} cy={H*0.12} r={3.2} fill={INK} opacity="0.85"/>
+            <circle cx={0} cy={H*0.12} r={1.8} fill="none" stroke={NOTE_BG} strokeWidth="0.6"/>
+          </g>
+        )}
+        {/* Hidden dashed overlay ring */}
+        {isHidden&&(
+          <ellipse cx={0} cy={0} rx={W/2+3} ry={H/2+3} fill="none" stroke={INK} strokeWidth="0.5" strokeDasharray="2 3" opacity="0.4"/>
+        )}
       </g>
     </g>
   );
@@ -1047,7 +1088,7 @@ function NotePaper({note,onClose,compact=false}){
         fontStyle:"italic",
         position:"relative",
         minHeight:compact?44:80,
-        paddingLeft:compact?18:24,
+        paddingLeft:compact?44:54,
       }}>
         {note.text||<span style={{color:INK_LIGHT}}>empty note</span>}
       </div>
@@ -1118,7 +1159,7 @@ function NoteCompose({onFinish,onCancel}){
               width:"100%",background:"none",border:"none",outline:"none",
               fontFamily:font,fontSize:15,color:INK,lineHeight:1.7,
               resize:"none",fontStyle:"italic",
-              paddingLeft:24,boxSizing:"border-box",
+              paddingLeft:52,boxSizing:"border-box",
               position:"relative",
             }}
             autoFocus
@@ -1229,10 +1270,111 @@ function ReadNoteModal({note,onClose}){
   );
 }
 
+// ── CRUMPLED NOTE REVEAL ──────────────────────────────────────────────────────
+function CrumpledNoteReveal({note,onSmoothed,onCancel}){
+  var [progress,setProgress]=useState(0); // 0-1 smoothness
+  var [strokes,setStrokes]=useState([]); // smoothed regions
+  var svgRef=useRef(null);
+  var drawing=useRef(false);
+  var THRESHOLD=0.72;
+
+  function getPos(e){
+    var c=e.touches?e.touches[0]:e;
+    var rect=svgRef.current.getBoundingClientRect();
+    return{x:(c.clientX-rect.left)/rect.width*200,y:(c.clientY-rect.top)/rect.height*260};
+  }
+
+  function onStart(e){drawing.current=true;var p=getPos(e);setStrokes(s=>[...s,[p]]);}
+  function onMove(e){
+    if(!drawing.current)return;
+    e.preventDefault();
+    var p=getPos(e);
+    setStrokes(s=>{var n=[...s];n[n.length-1]=[...n[n.length-1],p];return n;});
+    // Estimate coverage by stroke length
+    var total=strokes.reduce((acc,s)=>acc+s.length,0)+1;
+    var np=Math.min(1,total/180);
+    setProgress(np);
+    if(np>=THRESHOLD)setTimeout(()=>onSmoothed(note),300);
+  }
+  function onEnd(){drawing.current=false;}
+
+  // Crumple lines — random but seeded by note id
+  var seed=note.id.charCodeAt(0)+note.id.charCodeAt(1);
+  var crumpleLines=[];
+  for(var i=0;i<12;i++){
+    var x1=((seed*17+i*31)%180)+10,y1=((seed*13+i*23)%240)+10;
+    var x2=x1+((seed*7+i*19)%60)-30,y2=y1+((seed*11+i*37)%60)-30;
+    crumpleLines.push({x1,y1,x2:Math.max(5,Math.min(195,x2)),y2:Math.max(5,Math.min(255,y2))});
+  }
+
+  var smoothOpacity=Math.min(1,progress/THRESHOLD);
+
+  return(
+    <Portal>
+      <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(10,10,10,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}} onClick={onCancel}>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:NOTE_BG,opacity:0.7}}>
+            {progress<THRESHOLD?"smooth it out":"✓ smoothed"}
+          </div>
+          <svg ref={svgRef} width={200} height={260} viewBox="0 0 200 260"
+            style={{touchAction:"none",cursor:"crosshair",filter:`drop-shadow(2px 3px 0 rgba(0,0,0,0.4))`}}
+            onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd}
+            onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
+            {/* Paper base */}
+            <rect x={0} y={0} width={200} height={260} fill={NOTE_BG} rx="2"/>
+            {/* Crumple fold lines */}
+            {crumpleLines.map((l,i)=>(
+              <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+                stroke={INK_LIGHT} strokeWidth="0.8" opacity={0.6*(1-smoothOpacity)}/>
+            ))}
+            {/* Content obscured by scribble */}
+            <rect x={0} y={0} width={200} height={260} fill={NOTE_BG} opacity={0.9*(1-smoothOpacity)} rx="2"/>
+            {/* Scribble overlay */}
+            {Array.from({length:8}).map((_,i)=>{
+              var ys=20+i*30;
+              return <line key={i} x1={10+((seed*i*3)%20)} y1={ys} x2={180-((seed*i*7)%20)} y2={ys+((seed+i)%8)-4}
+                stroke={INK_LIGHT} strokeWidth="1" opacity={0.35*(1-smoothOpacity)}/>;
+            })}
+            {/* Smooth strokes drawn by user */}
+            {strokes.map((stroke,i)=>(
+              stroke.length>1&&<polyline key={i}
+                points={stroke.map(p=>p.x+","+p.y).join(" ")}
+                fill="none" stroke={NOTE_BG} strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
+            ))}
+            {/* Revealed content underneath */}
+            <g opacity={smoothOpacity}>
+              {[0,1,2,3,4].map(i=>(
+                <line key={i} x1={24} y1={68+i*26} x2={176} y2={68+i*26} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.4"/>
+              ))}
+              <line x1={42} y1={0} x2={42} y2={260} stroke="#c9a0a0" strokeWidth="0.5" opacity="0.35"/>
+              <text x={52} y={82} fontFamily="serif" fontSize="13" fill={INK} fontStyle="italic" opacity="0.9">{note.text?.slice(0,28)}</text>
+              {note.text?.length>28&&<text x={52} y={108} fontFamily="serif" fontSize="13" fill={INK} fontStyle="italic" opacity="0.9">{note.text.slice(28,56)}</text>}
+            </g>
+          </svg>
+          <button onClick={onCancel} style={{background:"none",border:"1px solid "+NOTE_BG,color:NOTE_BG,fontFamily:font,fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",padding:"8px 20px",cursor:"pointer",opacity:0.6}}>cancel</button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+// ── UNFOLD MODAL (tap-to-reveal for open/closed) ──────────────────────────────
+function UnfoldModal({note}){
+  return(
+    <Portal>
+      <div style={{position:"fixed",inset:0,zIndex:350,display:"flex",alignItems:"center",justifyContent:"center",padding:24,pointerEvents:"none"}}>
+        <div style={{width:"100%",maxWidth:340,animation:"noteUnfold 0.35s cubic-bezier(0.22,1,0.36,1)",transformOrigin:"center bottom"}}>
+          <NotePaper note={note}/>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}";
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}";
     document.head.appendChild(s);
     return()=>s.remove();
   },[]);
@@ -1241,6 +1383,13 @@ export default function App(){
   var [currentUser,setCurrentUser]=useState(null);
   var [tab,setTab]=useState("map");
   var [notes,setNotes]=useState([]);
+  var [revealedNoteIds,setRevealedNoteIds]=useState(new Set());
+  var [smoothedNoteIds,setSmoothedNoteIds]=useState(new Set());
+  var [crumpledNote,setCrumpledNote]=useState(null); // note being smoothed out
+  var [stampingNoteId,setStampingNoteId]=useState(null); // note playing stamp anim
+  var [unfoldingNote,setUnfoldingNote]=useState(null); // note playing unfold before read
+  var [hiddenNoteNotif,setHiddenNoteNotif]=useState(null); // notification for discovered hidden note
+  var hiddenNoteNotifTimer=useRef(null);
   var [notesPanelOpen,setNotesPanelOpen]=useState(false);
   var [notesView,setNotesView]=useState("list"); // "list" | "compose"
   var [placingNote,setPlacingNote]=useState(null); // note waiting to be placed
@@ -1421,6 +1570,8 @@ export default function App(){
     setPulseParticles(genPulseParticles(72));setOutwardParticles(genOutwardParticles(55));
     setHoldProgress(1);setPulseState("fired");setReturnProgress(0);setPulseFired(true);setBumpActive(false);
     setAllChats(chats=>{chats.forEach(c=>{if(c.type==="hidden"&&c.pulseable!==false)revealHiddenCircle(c.id);});return chats;});
+    // Reveal hidden notes via pulse
+    setNotes(ns=>{ns.forEach(n=>{if(n.placed&&n.visibility==="hidden")revealHiddenNote(n.id,n);});return ns;});
     var outDur=2200,retDur=1100,silMs=300,outStart=performance.now();
     function outTick(){var p=Math.min(1,(performance.now()-outStart)/outDur);setRippleProgress(p);if(p<1){rippleRaf.current=requestAnimationFrame(outTick);}else{setPulseFired(false);setInwardParticles(genInwardParticles(45));var retStart=performance.now()+silMs;function retTick(){var now=performance.now();if(now<retStart){rippleRaf.current=requestAnimationFrame(retTick);return;}var rp=Math.min(1,(now-retStart)/retDur);setReturnProgress(rp);if(rp<1){rippleRaf.current=requestAnimationFrame(retTick);}else{setRippleProgress(0);setReturnProgress(0);setHoldProgress(0);setPulseState("cooling");coolingTimer.current=setTimeout(()=>setPulseState("idle"),2500);}}rippleRaf.current=requestAnimationFrame(retTick);}}
     rippleRaf.current=requestAnimationFrame(outTick);
@@ -1540,11 +1691,54 @@ export default function App(){
     var pn=placingNoteRef.current;
     if(!pn)return;
     // TODO: replace with GPS confirmation in production
-    // For demo: tap on map places the note at that position
-    setNotes(prev=>prev.map(n=>n.id===pn.id?{...n,placed:true,placedPos:{x:svgPos.x-panX,y:svgPos.y-panY}}:n));
+    var placed={...pn,placed:true,placedPos:{x:svgPos.x-panX,y:svgPos.y-panY}};
+    setNotes(prev=>prev.map(n=>n.id===pn.id?placed:n));
     setPlacingNoteSync(null);
+    // Stamp animation
+    setStampingNoteId(pn.id);
+    setTimeout(()=>setStampingNoteId(null),600);
   }
   placeNoteRef.current=placeNote;
+
+  function revealHiddenNote(id,note){
+    setRevealedNoteIds(prev=>{if(prev.has(id))return prev;
+      // Fire discovery notification
+      if(note){
+        clearTimeout(hiddenNoteNotifTimer.current);
+        setHiddenNoteNotif(note);
+        hiddenNoteNotifTimer.current=setTimeout(()=>setHiddenNoteNotif(null),4000);
+      }
+      return new Set([...prev,id]);
+    });
+  }
+
+  // Proximity tag-match: reveal hidden notes whose tags overlap user's tags
+  // Only fires after initial mount (hasPlacedRef prevents instant reveal on load)
+  var hasProximityRun=useRef(false);
+  useEffect(()=>{
+    if(!currentUser||!hasProximityRun.current){hasProximityRun.current=true;return;}
+    var userTags=currentUser.tags||[];
+    notes.forEach(n=>{
+      if(n.placed&&n.visibility==="hidden"&&!revealedNoteIds.has(n.id)){
+        var overlap=n.tags.filter(t=>userTags.includes(t)).length;
+        if(overlap>0)revealHiddenNote(n.id,n);
+      }
+    });
+  },[notes]);
+
+  function handleNoteClick(note){
+    if(note.visibility==="hidden"&&!smoothedNoteIds.has(note.id)){
+      setCrumpledNote(note);return;
+    }
+    setUnfoldingNote(note);
+    setTimeout(()=>{setUnfoldingNote(null);setReadingNote(note);},350);
+  }
+
+  function handleNoteSmoothed(note){
+    setSmoothedNoteIds(prev=>new Set([...prev,note.id]));
+    setCrumpledNote(null);
+    setTimeout(()=>setReadingNote(note),200);
+  }
 
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
@@ -1591,6 +1785,26 @@ export default function App(){
     {showPersonCard&&nearbyUser&&<PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson}/>}
     {showCircleCard&&nearbyCircle&&<CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle}/>}
     {interestMatchCircle&&<InterestMatchNotif circle={interestMatchCircle} sharedTags={interestMatchTags} onGo={()=>goToInterestMatch(interestMatchCircle)} onDismiss={()=>setInterestMatchCircle(null)}/>}
+    {/* Hidden note discovery notification */}
+    {hiddenNoteNotif&&(
+      <div onClick={()=>{setHiddenNoteNotif(null);setCrumpledNote(hiddenNoteNotif);}} style={{
+        position:"fixed",top:0,left:0,right:0,zIndex:200,
+        background:INK,color:NOTE_BG,
+        padding:"10px 18px",display:"flex",alignItems:"center",gap:10,
+        cursor:"pointer",fontFamily:font,
+        animation:"noteUnfold 0.3s ease",
+      }}>
+        <svg width={16} height={12} viewBox="0 0 16 12">
+          <rect x={0} y={0} width={16} height={12} fill="none" stroke={NOTE_BG} strokeWidth="1" rx="0.5"/>
+          <polyline points="0,0 8,6.5 16,0" fill="none" stroke={NOTE_BG} strokeWidth="0.9"/>
+        </svg>
+        <div style={{flex:1}}>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Hidden note found nearby</div>
+          <div style={{fontSize:8,opacity:0.6,marginTop:1}}>tap to reveal</div>
+        </div>
+        <button onClick={e=>{e.stopPropagation();setHiddenNoteNotif(null);}} style={{background:"none",border:"none",color:NOTE_BG,fontSize:16,cursor:"pointer",opacity:0.5,padding:0}}>×</button>
+      </div>
+    )}
 
     {pulseChatUser&&<>
       {spontaneousTarget&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/> }
@@ -1654,8 +1868,8 @@ export default function App(){
             {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
             {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} panX={panX} panY={panY}/>)}
             {/* Placed note envelopes — already inside pan group, no extra transform needed */}
-            {notes.filter(n=>n.placed&&n.placedPos).map(n=>(
-              <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={setReadingNote} radius={radius} panX={panX} panY={panY}/>
+            {notes.filter(n=>n.placed&&n.placedPos).filter(n=>n.visibility!=="hidden"||revealedNoteIds.has(n.id)).map(n=>(
+              <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={handleNoteClick} radius={radius} panX={panX} panY={panY} stamping={stampingNoteId===n.id} revealed={revealedNoteIds.has(n.id)}/>
             ))}
           </g>
           <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
@@ -1740,6 +1954,10 @@ export default function App(){
 
     {/* Read note modal — available on any tab */}
     {readingNote&&<ReadNoteModal note={readingNote} onClose={()=>setReadingNote(null)}/>}
+    {/* Crumpled note smoothing reveal */}
+    {crumpledNote&&<CrumpledNoteReveal note={crumpledNote} onSmoothed={handleNoteSmoothed} onCancel={()=>setCrumpledNote(null)}/>}
+    {/* Unfold animation before read modal */}
+    {unfoldingNote&&<UnfoldModal note={unfoldingNote}/>}
 
     {tab==="circles"&&(<div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain"}}>
       {!hasRadius&&<div style={{padding:"32px 18px",color:INK_MID,fontSize:13,fontStyle:"italic",textAlign:"center"}}>Draw your circle on the map first.</div>}
