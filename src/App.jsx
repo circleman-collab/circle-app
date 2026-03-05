@@ -858,6 +858,7 @@ export default function App(){
   var [revealProgress,setRevealProgress]=useState({});
   var [lensReveal,setLensReveal]=useState({});
   var lensRevealRefs=useRef({});
+  var lensRafs=useRef({});
   var [breathe,setBreathe]=useState(1);
   var [holdProgress,setHoldProgress]=useState(0);
   var [pulseState,setPulseState]=useState("idle");
@@ -942,27 +943,34 @@ export default function App(){
 
   // Animate lens reveal — DS-style illuminate as markers enter/exit the lens
   useEffect(()=>{
-    var rafs=[];
+    if(!allChats.length)return;
+    var hasLens=radius!==null&&radius!==undefined;
     allChats.filter(c=>c.type!=="hidden").forEach(c=>{
-      var inLens=radius!==null&&radius!==undefined&&c.r<=radius;
+      var target=hasLens&&c.r<=radius?1:0;
       var current=lensRevealRefs.current[c.id]||0;
-      var target=inLens?1:0;
-      if(current===target)return;
-      var start=performance.now();
-      var from=current;
-      var dur=inLens?220:300;
-      function animate(){
-        var p=Math.min(1,(performance.now()-start)/dur);
-        // DS pop: fast ease-out in, smooth ease-in-out out
-        var eased=inLens?1-Math.pow(1-p,2.5):p*p;
-        var val=from+(target-from)*eased;
-        lensRevealRefs.current[c.id]=val;
-        setLensReveal(prev=>({...prev,[c.id]:val}));
-        if(p<1)rafs.push(requestAnimationFrame(animate));
+      if(Math.abs(current-target)<0.001){
+        lensRevealRefs.current[c.id]=target;
+        setLensReveal(prev=>({...prev,[c.id]:target}));
+        return;
       }
-      rafs.push(requestAnimationFrame(animate));
+      cancelAnimationFrame(lensRafs.current[c.id]);
+      var id=c.id;
+      var from=current;
+      var start=performance.now();
+      var dur=target===1?200:280;
+      function tick(){
+        var p=Math.min(1,(performance.now()-start)/dur);
+        // entering lens: fast ease-out pop. exiting: smooth ease-in
+        var eased=target===1?(1-Math.pow(1-p,3)):(p*p);
+        var val=from+(target-from)*eased;
+        lensRevealRefs.current[id]=val;
+        setLensReveal(prev=>({...prev,[id]:val}));
+        if(p<1){lensRafs.current[id]=requestAnimationFrame(tick);}
+        else{lensRevealRefs.current[id]=target;}
+      }
+      lensRafs.current[id]=requestAnimationFrame(tick);
     });
-    return()=>rafs.forEach(r=>cancelAnimationFrame(r));
+    return()=>{Object.values(lensRafs.current).forEach(r=>cancelAnimationFrame(r));};
   },[radius,allChats]);
 
   function revealHiddenCircle(id){
