@@ -1495,8 +1495,7 @@ function EditCircleModal({circle,onSave,onClose}){
   var ii={background:"none",border:"none",borderBottom:"1.5px solid "+INK_LIGHT,outline:"none",fontFamily:font,color:INK,width:"100%"};
 
   return(
-    <Portal>
-      <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(10,10,10,0.55)",display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>{if(Date.now()-openedAt.current>350)onClose();}}>
+    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(10,10,10,0.55)",display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>{if(Date.now()-openedAt.current>350)onClose();}}>
         <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:430,margin:"0 auto",padding:"24px 22px 36px",boxShadow:"0 -4px 0 "+INK,maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
           <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:18}}>Edit Circle</div>
 
@@ -1560,7 +1559,7 @@ function EditCircleModal({circle,onSave,onClose}){
           </div>
         </div>
       </div>
-    </Portal>
+    </div>
   );
 }
 
@@ -2000,7 +1999,7 @@ export default function App(){
   var chatColor=selectedChat?circleColor(selectedChat):INK;
   var isDemo=selectedChat?.governance?.mode==="democracy";
 
-  return(<div style={outerShell}><div style={phoneCard}>
+  return(<><div style={outerShell}><div style={phoneCard}>
     {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
     {showPersonCard&&nearbyUser&&<PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson}/>}
     {showCircleCard&&nearbyCircle&&<CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle}/>}
@@ -2300,8 +2299,7 @@ export default function App(){
       </div>
     </div>)}
 
-    {editingCircle&&<EditCircleModal circle={editingCircle} onSave={handleCircleSave} onClose={()=>setEditingCircle(null)}/>}
     <BottomNav tab={tab} setTab={setTab} currentUser={currentUser}/>
     </>}
-  </div></div>);
+  </div></div>{editingCircle&&<EditCircleModal circle={editingCircle} onSave={handleCircleSave} onClose={()=>setEditingCircle(null)}/>}</>);
 }
