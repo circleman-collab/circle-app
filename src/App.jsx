@@ -1603,7 +1603,7 @@ export default function App(){
   var drawPhaseRef=useRef("idle");
   function setDrawPhaseSync(v){drawPhaseRef.current=v;setDrawPhase(v);}
   var [drawPath,setDrawPath]=useState([]);
-  var [,setLiveRadius]=useState(0);
+  var [_liveRadius,setLiveRadius]=useState(0); // eslint-disable-line no-unused-vars
   var [circleScale,setCircleScale]=useState(1);
   var [selectedChat,setSelectedChat]=useState(null);
   var [joinTarget,setJoinTarget]=useState(null);
