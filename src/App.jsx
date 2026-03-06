@@ -763,14 +763,17 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,panX,p
   var R=10,color=circleColor(chat);
   var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
   var hasLens=radius!==null&&radius!==undefined;
-  // Marker screen pos shifts by pan, lens stays at (cx,cy).
-  // Compute actual distance from lens center to marker accounting for pan.
   var screenX=x+panX,screenY=y+panY;
   var distFromCenter=Math.sqrt((screenX-cx)*(screenX-cx)+(screenY-cy)*(screenY-cy));
   var inLens=!hasLens||distFromCenter<=radius;
-  // CSS transition handles the smooth animation — no rAF needed
   var baseOp=hasLens?(inLens?1:0.12):1;
   var transition="opacity 0.25s ease, filter 0.25s ease";
+  var prevInLens=useRef(inLens);
+  var [ringPopping,setRingPopping]=useState(false);
+  useEffect(()=>{
+    if(!prevInLens.current&&inLens){setRingPopping(true);setTimeout(()=>setRingPopping(false),520);}
+    prevInLens.current=inLens;
+  },[inLens]);
 
   if(chat.type==="hidden"){
     if(!revealProgress||revealProgress<=0)return null;
@@ -788,8 +791,15 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,panX,p
 
   return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition}}>
     <circle cx={x} cy={y} r={22} fill="transparent"/>
-    {/* DS glow ring — only when inside lens */}
-    {hasLens&&inLens&&<circle cx={x} cy={y} r={R+6} fill="none" stroke={color} strokeWidth="2.5" opacity={0.35}/>}
+    {/* Lens ring — static when settled, pops on enter */}
+    {hasLens&&inLens&&<circle cx={x} cy={y} r={R+6} fill="none" stroke={color} strokeWidth="2.5"
+      opacity={ringPopping?0:0.35}
+      style={ringPopping?{}:{transition:"opacity 0.2s ease"}}
+    />}
+    {/* Pop burst ring — animates on lens enter */}
+    {ringPopping&&<circle cx={x} cy={y} r={R+6} fill="none" stroke={color} strokeWidth="2.5"
+      style={{animation:"lensRingPop 0.52s cubic-bezier(0.22,1,0.36,1) forwards",transformOrigin:`${x}px ${y}px`,transformBox:"fill-box"}}
+    />}
     {highlighted&&<circle cx={x} cy={y} r={R+10} fill="none" stroke={color} strokeWidth="1.5" opacity={0.6} strokeDasharray="3 3"/>}
     {highlighted&&<circle cx={x} cy={y} r={R+18} fill="none" stroke={color} strokeWidth="0.8" opacity={0.25} strokeDasharray="2 4"/>}
     {chat.type==="open"&&<circle cx={x} cy={y} r={R} fill={color}/>}
@@ -895,7 +905,7 @@ function CreateFlow({onComplete,onCancel}){
     {step===1&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:32}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Name your circle</div><input ref={inputRef} value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}} placeholder="WHAT IS IT CALLED" maxLength={32} style={{...ii,fontSize:22,fontWeight:900,letterSpacing:1,padding:"8px 0",textTransform:"uppercase"}}/><button onClick={()=>{if(canNext1)setStep(2);}} style={{...bb,background:canNext1?INK:"none",color:canNext1?BG:INK_LIGHT,border:"2px solid "+(canNext1?INK:INK_LIGHT)}}>Continue →</button></div>)}
     {step===2&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:14}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:4}}>What kind of circle?</div>{typeOptions.map(opt=>{var sel=ctype===opt.key;return(<div key={opt.key}><div onClick={()=>{setCtype(opt.key);if(opt.key!=="hidden")setPulseable(true);}} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",border:"2px solid "+(sel?INK:INK_LIGHT),cursor:"pointer",background:sel?INK:BG}}><svg width="22" height="22" viewBox="0 0 22 22">{opt.key==="open"&&<circle cx="11" cy="11" r="9" fill={sel?BG:INK}/>}{opt.key==="closed"&&<circle cx="11" cy="11" r="8" fill="none" stroke={sel?BG:INK} strokeWidth="2"/>}{opt.key==="hidden"&&<g>{[-3,-1,1,3].map(ii2=>{var hw=Math.sqrt(Math.max(0,81-ii2*ii2*4));return <line key={ii2} x1={11-hw} y1={11+ii2*1.8} x2={11+hw} y2={11+ii2*1.8} stroke={sel?BG:INK} strokeWidth="0.8" opacity="0.5"/>;})}<circle cx="11" cy="11" r="8" fill="none" stroke={sel?BG:INK} strokeWidth="1.5" strokeDasharray="3 2"/></g>}</svg><div><div style={{fontWeight:900,fontSize:13,color:sel?BG:INK,letterSpacing:.5}}>{opt.label}</div><div style={{fontSize:10,color:sel?INK_LIGHT:INK_MID,marginTop:2}}>{opt.desc}</div></div></div>{opt.key==="hidden"&&sel&&(<div onClick={()=>setPulseable(p=>!p)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderLeft:"2px solid "+INK,borderRight:"2px solid "+INK,borderBottom:"2px solid "+INK,cursor:"pointer",background:BG}}><div style={{width:32,height:18,borderRadius:9,background:pulseable?INK:INK_LIGHT,position:"relative",flexShrink:0,transition:"background 0.15s"}}><div style={{position:"absolute",top:3,left:pulseable?16:3,width:12,height:12,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div><div><div style={{fontSize:11,fontWeight:700,color:INK,letterSpacing:.5}}>Discoverable via Pulse</div><div style={{fontSize:9,color:INK_MID,marginTop:1}}>{pulseable?"Others can sense this circle nearby":"Invite only — completely off the map"}</div></div></div>)}</div>);})} <div style={{display:"flex",gap:10,marginTop:8}}><button onClick={()=>setStep(1)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext2)setStep(3);}} style={{...bb,flex:2,background:canNext2?INK:"none",color:canNext2?BG:INK_LIGHT,border:"2px solid "+(canNext2?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
     {step===3&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:20}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Tag it</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Min 3, max 6.</div></div><div style={{minHeight:80,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",padding:"12px 0"}}>{tags.map(t=><FloatingTag key={t} tag={t} confirming={confirming} onRemove={removeTag}/>)}{tags.length===0&&<span style={{fontSize:10,color:INK_LIGHT,fontStyle:"italic"}}>Tags will float here</span>}</div>{tags.length<6&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={inputRef} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{...ii,fontSize:16,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput)} style={{background:INK,color:BG,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}<div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Suggestions</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{TAG_SUGGESTIONS.filter(s=>!tags.includes(s.replace(/[^a-z0-9]/g,""))).slice(0,8).map(s=><div key={s} onClick={()=>addTag(s)} style={{border:"1px dashed "+INK_LIGHT,padding:"8px 12px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",color:INK_MID,minHeight:36,display:"inline-flex",alignItems:"center"}}>{s}</div>)}</div></div><div style={{fontSize:9,color:INK_MID}}>{tags.length}/6 · {Math.max(0,3-tags.length)} more needed</div><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(2)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext3)setStep(4);}} style={{...bb,flex:2,background:canNext3?INK:"none",color:canNext3?BG:INK_LIGHT,border:"2px solid "+(canNext3?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
-    {step===4&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Governance</div><div style={{display:"flex",border:"2px solid "+INK}}>{[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"12px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><FistIcon size={11} color={sel?BG:INK}/> Democracy</span>:"Admin Rule"}</button>);})}</div><div style={{fontSize:10,color:INK_MID,lineHeight:1.7}}>{govMode==="admin"?"Admins approve requests.":"Members vote. Majority rules."}</div><input value={adminsInput} onChange={e=>setAdminsInput(e.target.value)} placeholder="@handle, @handle..." style={{...ii,fontSize:16,padding:"6px 0"}}/><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(3)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(5)} style={{...bb,flex:2,background:INK,color:BG}}>Continue →</button></div></div>)}
+    {step===4&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Governance</div><div style={{display:"flex",border:"2px solid "+INK}}>{[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"12px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><FistIcon size={18} color={sel?BG:INK}/> Democracy</span>:"Admin Rule"}</button>);})}</div><div style={{fontSize:10,color:INK_MID,lineHeight:1.7}}>{govMode==="admin"?"Admins approve requests.":"Members vote. Majority rules."}</div><input value={adminsInput} onChange={e=>setAdminsInput(e.target.value)} placeholder="@handle, @handle..." style={{...ii,fontSize:16,padding:"6px 0"}}/><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(3)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(5)} style={{...bb,flex:2,background:INK,color:BG}}>Continue →</button></div></div>)}
     {step===5&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}>
       <div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Choose a color</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,padding:"8px 0"}}>{CIRCLE_PALETTE.map(col=>(<div key={col} onClick={()=>setCircColor(col)} style={{width:32,height:32,background:col,cursor:"pointer",border:circColor===col?"3px solid "+INK:"3px solid transparent",borderRadius:2,transition:"border 0.1s",boxSizing:"border-box"}}/>))}</div>
@@ -1431,6 +1441,108 @@ function UnfoldModal({note}){
   );
 }
 
+function EditCircleModal({circle,onSave,onClose}){
+  var [name,setName]=useState(circle.name);
+  var [ctype,setCtype]=useState(circle.type);
+  var [color,setColor]=useState(circleColor(circle));
+  var [tags,setTags]=useState(circle.tags||[]);
+  var [tagInput,setTagInput]=useState("");
+  var [govMode,setGovMode]=useState(circle.governance?.mode||"admin");
+  var [passphrase,setPassphrase]=useState(circle.passphrase||"");
+  var [pulseable,setPulseable]=useState(circle.pulseable!==false);
+
+  function addTag(t){var c=t.trim().toLowerCase().replace(/[^a-z0-9]/g,"");if(!c||tags.includes(c)||tags.length>=6)return;setTags(p=>[...p,c]);setTagInput("");}
+  function removeTag(t){setTags(p=>p.filter(x=>x!==t));}
+
+  function save(){
+    var nameChanged=name.trim()!==circle.name;
+    var tagsChanged=JSON.stringify([...tags].sort())!==JSON.stringify([...circle.tags].sort());
+    onSave({
+      ...circle,
+      name:name.trim()||circle.name,
+      type:ctype,
+      color,
+      tags,
+      governance:{...circle.governance,mode:govMode},
+      passphrase:passphrase.trim(),
+      pulseable,
+    },nameChanged,tagsChanged);
+    onClose();
+  }
+
+  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"11px 0",border:"none"};
+  var ii={background:"none",border:"none",borderBottom:"1.5px solid "+INK_LIGHT,outline:"none",fontFamily:font,color:INK,width:"100%"};
+
+  return(
+    <Portal>
+      <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(10,10,10,0.55)",display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={onClose}>
+        <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:430,margin:"0 auto",padding:"24px 22px 36px",boxShadow:"0 -4px 0 "+INK,maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:18}}>Edit Circle</div>
+
+          {/* Name */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Name</div>
+            <input value={name} onChange={e=>setName(e.target.value)} maxLength={48} style={{...ii,fontSize:15,fontWeight:900,letterSpacing:.5,padding:"4px 0"}}/>
+          </div>
+
+          {/* Type */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Type</div>
+            <div style={{display:"flex",border:"2px solid "+INK}}>
+              {["open","closed","hidden"].map((t,i)=>{var sel=ctype===t;return(<button key={t} onClick={()=>setCtype(t)} style={{flex:1,padding:"10px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i<2?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{t}</button>);})}
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Tags <span style={{opacity:.5,fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:9}}>(tap to remove)</span></div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {tags.map(t=>(<span key={t} onClick={()=>removeTag(t)} style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",border:"1.5px solid "+INK,padding:"3px 8px",color:INK,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>{t} <span style={{opacity:.4}}>×</span></span>))}
+            </div>
+            {tags.length<6&&<div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{...ii,fontSize:13,padding:"4px 0",flex:1}}/>
+              <button onClick={()=>addTag(tagInput)} style={{background:INK,color:BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1}}>+</button>
+            </div>}
+          </div>
+
+          {/* Color */}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Color</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {CIRCLE_PALETTE.map(col=>(<div key={col} onClick={()=>setColor(col)} style={{width:28,height:28,background:col,cursor:"pointer",border:color===col?"3px solid "+INK:"3px solid transparent",borderRadius:2,boxSizing:"border-box"}}/>))}
+            </div>
+          </div>
+
+          {/* Governance */}
+          <div style={{marginBottom:ctype==="hidden"?18:24}}>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Governance</div>
+            <div style={{display:"flex",border:"2px solid "+INK}}>
+              {[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"10px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:5}}><FistIcon size={13} color={sel?BG:INK}/> Democracy</span>:"Admin Rule"}</button>);})}
+            </div>
+          </div>
+
+          {/* Passphrase — hidden only */}
+          {ctype==="hidden"&&<div style={{marginBottom:24}}>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Passphrase <span style={{opacity:.5,fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:9}}>(optional)</span></div>
+            <input value={passphrase} onChange={e=>setPassphrase(e.target.value)} placeholder="velvet fog..." maxLength={48} style={{...ii,fontSize:14,fontStyle:"italic",padding:"4px 0"}}/>
+          </div>}
+
+          {/* Discoverable — hidden only */}
+          {ctype==="hidden"&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:"1px solid "+INK_LIGHT,marginBottom:20}}>
+            <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:INK,letterSpacing:.5}}>Discoverable via Pulse</div><div style={{fontSize:9,color:INK_MID,marginTop:1}}>{pulseable?"Others can sense this circle":"Invite only"}</div></div>
+            <div onClick={()=>setPulseable(p=>!p)} style={{width:36,height:20,borderRadius:10,background:pulseable?INK:INK_LIGHT,position:"relative",cursor:"pointer",transition:"background 0.15s",flexShrink:0}}><div style={{position:"absolute",top:3,left:pulseable?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
+          </div>}
+
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={onClose} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>Cancel</button>
+            <button onClick={save} style={{...bb,flex:2,background:INK,color:BG}}>Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 function ProfileTagInput({onAdd}){
   var [val,setVal]=useState("");
   function submit(){var c=val.trim().toLowerCase().replace(/[^a-z0-9]/g,"");if(c){onAdd(c);setVal("");}}
@@ -1444,7 +1556,7 @@ function ProfileTagInput({onAdd}){
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}";
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}@keyframes lensRingPop{0%{transform:scale(1);opacity:0;}25%{transform:scale(1.55);opacity:0.6;}60%{transform:scale(0.92);opacity:0.42;}80%{transform:scale(1.08);opacity:0.37;}100%{transform:scale(1);opacity:0.35;}}";
     document.head.appendChild(s);
     return()=>s.remove();
   },[]);
@@ -1496,7 +1608,7 @@ export default function App(){
   var [pulseParticles,setPulseParticles]=useState(()=>genPulseParticles(90));
   var [outwardParticles,setOutwardParticles]=useState(()=>genOutwardParticles(69));
   var [inwardParticles,setInwardParticles]=useState(()=>genInwardParticles(56));
-  var [plantParticles,setPlantParticles]=useState(()=>genPlantParticles(57));
+  var [plantParticles,setPlantParticles]=useState(()=>genPlantParticles(85));
 
   var [nearbyUser,setNearbyUser]=useState(null);
   var [nearbyUserProgress,setNearbyUserProgress]=useState(0);
@@ -1687,7 +1799,7 @@ export default function App(){
     });
   },[]);
 
-  const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(57));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
+  const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(85));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
   const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
   const onMapDown=useCallback((e)=>{
     // Note placement mode — tap anywhere to place
@@ -1845,6 +1957,18 @@ export default function App(){
   var eased=1-Math.pow(1-returnProgress,2);
   var retR=STAGE_R*(1-eased)+BTN_R*eased;
   var retOp=returnProgress<.85?.7:((1-returnProgress)/.15)*.7;
+
+  function handleCircleSave(updated,nameChanged,tagsChanged){
+    setAllChats(prev=>prev.map(c=>c.id===updated.id?updated:c));
+    if(selectedChat?.id===updated.id)setSelectedChat(updated);
+    // Notify members if name or tags changed (simulated)
+    if(nameChanged||tagsChanged){
+      var msg=nameChanged&&tagsChanged?"Circle name and tags updated."
+        :nameChanged?"Circle name updated to \""+updated.name+"\"."
+        :"Circle tags updated.";
+      setAllChats(prev=>prev.map(c=>c.id===updated.id?{...c,msgs:[...c.msgs,{id:Date.now(),text:msg,senderHandle:"system",senderId:"system",ts:Date.now()}]}:c));
+    }
+  }
 
   var liveChat=selectedChat?(allChats.find(c=>c.id===selectedChat.id)||selectedChat):null;
   var msgs=liveChat?liveChat.msgs||[]:[];
@@ -2037,11 +2161,12 @@ export default function App(){
         var color=circleColor(c),isHidden=c.type==="hidden",isRevealed=revealedIds.has(c.id),isJoined=joinedIds.has(c.id);
         if(isHidden&&!isRevealed)return null;
         var sharedTags=(currentUser.tags||[]).filter(t=>c.tags.includes(t));
-        return(<div key={c.id} onClick={()=>handleChatClick(c)} style={{padding:"15px 18px",borderBottom:"1px solid "+INK_LIGHT,cursor:"pointer",display:"flex",flexDirection:"column",gap:6,minHeight:64,opacity:c.r>radius?.3:1,transition:"opacity 0.2s"}}>
+        var isActive=isJoined||c.isOwn;
+        return(<div key={c.id} onClick={()=>handleChatClick(c)} style={{padding:"15px 18px",borderBottom:"1px solid "+INK_LIGHT,cursor:"pointer",display:"flex",flexDirection:"column",gap:6,minHeight:64,opacity:isActive?1:0.4,transition:"opacity 0.2s"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:11,height:11,borderRadius:"50%",flexShrink:0,background:c.type==="open"?color:"none",border:"2px "+(c.type==="hidden"?"dashed":"solid")+" "+color}}/>
-              <div><div style={{fontWeight:900,fontSize:14,color:INK}}>{isHidden&&!isJoined?"???":c.name}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,display:"flex",alignItems:"center",gap:4}}>{c.dist}mi{c.members?" · "+c.members+" members":""}{c.governance&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}> · {c.governance.mode==="democracy"?<FistIcon size={9}/>:"◈"}</span>}</div></div>
+              <div><div style={{fontWeight:900,fontSize:14,color:INK}}>{isHidden&&!isJoined?"???":c.name}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,display:"flex",alignItems:"center",gap:4}}>{c.dist}mi{c.members?" · "+c.members+" members":""}{c.governance&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}> · {c.governance.mode==="democracy"?<FistIcon size={14}/>:"◈"}</span>}</div></div>
             </div>
             <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",border:"1.5px "+(c.type==="hidden"?"dashed":"solid")+" "+color,padding:"4px 8px",color:c.type==="open"?BG:color,background:c.type==="open"?color:"none",flexShrink:0}}>{isHidden?(isJoined?"hidden":"?"):c.type}</div>
           </div>
@@ -2145,21 +2270,8 @@ export default function App(){
         </div>
       </div>
     </div>)}
-    {editingCircle&&(
-      <Portal>
-        <div style={{position:"fixed",inset:0,zIndex:300,background:"rgba(10,10,10,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setEditingCircle(null)}>
-          <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:430,padding:"28px 24px 36px",boxShadow:"0 -4px 0 "+INK}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:16}}>Edit Circle</div>
-            <div style={{fontWeight:900,fontSize:15,letterSpacing:1,color:INK,marginBottom:20}}>{editingCircle.name}</div>
-            <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:10}}>Color</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:24}}>
-              {CIRCLE_PALETTE.map(col=>(<div key={col} onClick={()=>{setAllChats(prev=>prev.map(c=>c.id===editingCircle.id?{...c,color:col}:c));setEditingCircle(prev=>({...prev,color:col}));}} style={{width:32,height:32,background:col,cursor:"pointer",border:circleColor(editingCircle)===col?"3px solid "+INK:"3px solid transparent",borderRadius:2,boxSizing:"border-box"}}/>))}
-            </div>
-            <button onClick={()=>setEditingCircle(null)} style={{width:"100%",background:INK,color:BG,border:"none",padding:"13px 0",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Done</button>
-          </div>
-        </div>
-      </Portal>
-    )}
+
+    {editingCircle&&<EditCircleModal circle={editingCircle} onSave={handleCircleSave} onClose={()=>setEditingCircle(null)}/>}
     <BottomNav tab={tab} setTab={setTab} currentUser={currentUser}/>
     </>}
   </div></div>);
