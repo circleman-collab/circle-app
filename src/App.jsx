@@ -1997,7 +1997,6 @@ export default function App(){
   var liveChat=selectedChat?(allChats.find(c=>c.id===selectedChat.id)||selectedChat):null;
   var msgs=liveChat?liveChat.msgs||[]:[];
   var chatColor=selectedChat?circleColor(selectedChat):INK;
-  var isDemo=selectedChat?.governance?.mode==="democracy";
 
   return(<><div style={outerShell}><div style={phoneCard}>
     {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
