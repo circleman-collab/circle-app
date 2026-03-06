@@ -739,22 +739,41 @@ function genOutwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.P
 function genInwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.4;p.push({angle:a,spawnMult:1.3+Math.random()*1.4,size:.8+Math.random()*1.8,delay:Math.random()*.28,drift:(Math.random()-.5)*2.8,driftFreq:1.5+Math.random()*2.5,brightness:.35+Math.random()*.65});}return p;}
 function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2;var big=i%4===0;var giant=i%12===0;p.push({angle:a+(Math.random()-.5)*.7,scatter:giant?(90+Math.random()*60):big?(55+Math.random()*40):(28+Math.random()*42),size:giant?(2.2+Math.random()*1.6):big?(1.6+Math.random()*1.4):(0.7+Math.random()*1.2),delay:Math.random()*.28,drift:(Math.random()-.5)*4,driftFreq:1.5+Math.random()*3});}return p;}
 
-function FistIcon({size=12,color=INK}){
-  // Raised solidarity fist — thick pictogram, no detail
+function FistIcon({size=16,color=INK}){
+  // Classic raised solidarity fist — clean silhouette
   return(
-    <svg width={size} height={size*1.2} viewBox="0 0 20 24" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}>
-      {/* Four fingers curled — top knuckle row */}
-      <rect x={4} y={4} width={12} height={6} rx={2} fill={color}/>
-      {/* Finger dividers */}
-      <line x1={7.5} y1={4} x2={7.5} y2={10} stroke={color==="white"||color===BG?"rgba(0,0,0,0.2)":"rgba(255,255,255,0.25)"} strokeWidth={1}/>
-      <line x1={11} y1={4} x2={11} y2={10} stroke={color==="white"||color===BG?"rgba(0,0,0,0.2)":"rgba(255,255,255,0.25)"} strokeWidth={1}/>
-      <line x1={14} y1={4} x2={14} y2={10} stroke={color==="white"||color===BG?"rgba(0,0,0,0.2)":"rgba(255,255,255,0.25)"} strokeWidth={1}/>
-      {/* Palm / lower fist */}
-      <rect x={4} y={9} width={12} height={8} rx={1} fill={color}/>
-      {/* Thumb — tucked to the left side */}
-      <rect x={1} y={11} width={5} height={4} rx={2} fill={color}/>
+    <svg width={size} height={size*1.1} viewBox="0 0 24 26" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}>
+      {/* Fingers — four rounded rectangles side by side, curled */}
+      <rect x={5} y={3} width={4} height={7} rx={2} fill={color}/>
+      <rect x={9.5} y={2} width={4} height={8} rx={2} fill={color}/>
+      <rect x={14} y={3} width={4} height={7} rx={2} fill={color}/>
+      {/* Knuckle bar connecting fingers */}
+      <rect x={5} y={8} width={13} height={3} rx={1} fill={color}/>
+      {/* Palm */}
+      <rect x={5} y={10} width={13} height={8} rx={1.5} fill={color}/>
+      {/* Thumb — tucked against side */}
+      <rect x={1.5} y={12} width={5} height={4} rx={2} fill={color}/>
       {/* Wrist */}
-      <rect x={5} y={16} width={10} height={4} rx={1} fill={color}/>
+      <rect x={6} y={17} width={10} height={5} rx={1} fill={color}/>
+    </svg>
+  );
+}
+
+function SpectaclesIcon({size=16,color=INK}){
+  // Wire-frame spectacles — two lens circles connected by bridge
+  var sw=1.6;
+  return(
+    <svg width={size*1.4} height={size*0.7} viewBox="0 0 32 16" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}>
+      {/* Left lens */}
+      <circle cx={8} cy={8} r={6} fill="none" stroke={color} strokeWidth={sw}/>
+      {/* Right lens */}
+      <circle cx={24} cy={8} r={6} fill="none" stroke={color} strokeWidth={sw}/>
+      {/* Bridge */}
+      <path d="M 14 8 Q 16 6 18 8" fill="none" stroke={color} strokeWidth={sw}/>
+      {/* Left temple arm */}
+      <line x1={2} y1={5} x2={0} y2={3} stroke={color} strokeWidth={sw} strokeLinecap="round"/>
+      {/* Right temple arm */}
+      <line x1={30} y1={5} x2={32} y2={3} stroke={color} strokeWidth={sw} strokeLinecap="round"/>
     </svg>
   );
 }
@@ -906,7 +925,7 @@ function CreateFlow({onComplete,onCancel}){
     {step===1&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:32}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Name your circle</div><input ref={inputRef} value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}} placeholder="WHAT IS IT CALLED" maxLength={32} style={{...ii,fontSize:22,fontWeight:900,letterSpacing:1,padding:"8px 0",textTransform:"uppercase"}}/><button onClick={()=>{if(canNext1)setStep(2);}} style={{...bb,background:canNext1?INK:"none",color:canNext1?BG:INK_LIGHT,border:"2px solid "+(canNext1?INK:INK_LIGHT)}}>Continue →</button></div>)}
     {step===2&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:14}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:4}}>What kind of circle?</div>{typeOptions.map(opt=>{var sel=ctype===opt.key;return(<div key={opt.key}><div onClick={()=>{setCtype(opt.key);if(opt.key!=="hidden")setPulseable(true);}} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",border:"2px solid "+(sel?INK:INK_LIGHT),cursor:"pointer",background:sel?INK:BG}}><svg width="22" height="22" viewBox="0 0 22 22">{opt.key==="open"&&<circle cx="11" cy="11" r="9" fill={sel?BG:INK}/>}{opt.key==="closed"&&<circle cx="11" cy="11" r="8" fill="none" stroke={sel?BG:INK} strokeWidth="2"/>}{opt.key==="hidden"&&<g>{[-3,-1,1,3].map(ii2=>{var hw=Math.sqrt(Math.max(0,81-ii2*ii2*4));return <line key={ii2} x1={11-hw} y1={11+ii2*1.8} x2={11+hw} y2={11+ii2*1.8} stroke={sel?BG:INK} strokeWidth="0.8" opacity="0.5"/>;})}<circle cx="11" cy="11" r="8" fill="none" stroke={sel?BG:INK} strokeWidth="1.5" strokeDasharray="3 2"/></g>}</svg><div><div style={{fontWeight:900,fontSize:13,color:sel?BG:INK,letterSpacing:.5}}>{opt.label}</div><div style={{fontSize:10,color:sel?INK_LIGHT:INK_MID,marginTop:2}}>{opt.desc}</div></div></div>{opt.key==="hidden"&&sel&&(<div onClick={()=>setPulseable(p=>!p)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderLeft:"2px solid "+INK,borderRight:"2px solid "+INK,borderBottom:"2px solid "+INK,cursor:"pointer",background:BG}}><div style={{width:32,height:18,borderRadius:9,background:pulseable?INK:INK_LIGHT,position:"relative",flexShrink:0,transition:"background 0.15s"}}><div style={{position:"absolute",top:3,left:pulseable?16:3,width:12,height:12,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div><div><div style={{fontSize:11,fontWeight:700,color:INK,letterSpacing:.5}}>Discoverable via Pulse</div><div style={{fontSize:9,color:INK_MID,marginTop:1}}>{pulseable?"Others can sense this circle nearby":"Invite only — completely off the map"}</div></div></div>)}</div>);})} <div style={{display:"flex",gap:10,marginTop:8}}><button onClick={()=>setStep(1)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext2)setStep(3);}} style={{...bb,flex:2,background:canNext2?INK:"none",color:canNext2?BG:INK_LIGHT,border:"2px solid "+(canNext2?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
     {step===3&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:20}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Tag it</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Min 3, max 6.</div></div><div style={{minHeight:80,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",padding:"12px 0"}}>{tags.map(t=><FloatingTag key={t} tag={t} confirming={confirming} onRemove={removeTag}/>)}{tags.length===0&&<span style={{fontSize:10,color:INK_LIGHT,fontStyle:"italic"}}>Tags will float here</span>}</div>{tags.length<6&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={inputRef} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{...ii,fontSize:16,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput)} style={{background:INK,color:BG,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}<div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Suggestions</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{TAG_SUGGESTIONS.filter(s=>!tags.includes(s.replace(/[^a-z0-9]/g,""))).slice(0,8).map(s=><div key={s} onClick={()=>addTag(s)} style={{border:"1px dashed "+INK_LIGHT,padding:"8px 12px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",color:INK_MID,minHeight:36,display:"inline-flex",alignItems:"center"}}>{s}</div>)}</div></div><div style={{fontSize:9,color:INK_MID}}>{tags.length}/6 · {Math.max(0,3-tags.length)} more needed</div><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(2)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext3)setStep(4);}} style={{...bb,flex:2,background:canNext3?INK:"none",color:canNext3?BG:INK_LIGHT,border:"2px solid "+(canNext3?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
-    {step===4&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Governance</div><div style={{display:"flex",border:"2px solid "+INK}}>{[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"12px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><FistIcon size={18} color={sel?BG:INK}/> Democracy</span>:"Admin Rule"}</button>);})}</div><div style={{fontSize:10,color:INK_MID,lineHeight:1.7}}>{govMode==="admin"?"Admins approve requests.":"Members vote. Majority rules."}</div><input value={adminsInput} onChange={e=>setAdminsInput(e.target.value)} placeholder="@handle, @handle..." style={{...ii,fontSize:16,padding:"6px 0"}}/><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(3)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(5)} style={{...bb,flex:2,background:INK,color:BG}}>Continue →</button></div></div>)}
+    {step===4&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Governance</div><div style={{display:"flex",border:"2px solid "+INK}}>{[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"12px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><FistIcon size={18} color={sel?BG:INK}/> Democracy</span>:<span style={{display:"inline-flex",alignItems:"center",gap:6}}><SpectaclesIcon size={14} color={sel?BG:INK}/> Admin Rule</span>}</button>);})}</div><div style={{fontSize:10,color:INK_MID,lineHeight:1.7}}>{govMode==="admin"?"Admins approve requests.":"Members vote. Majority rules."}</div><input value={adminsInput} onChange={e=>setAdminsInput(e.target.value)} placeholder="@handle, @handle..." style={{...ii,fontSize:16,padding:"6px 0"}}/><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(3)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(5)} style={{...bb,flex:2,background:INK,color:BG}}>Continue →</button></div></div>)}
     {step===5&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}>
       <div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Choose a color</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,padding:"8px 0"}}>{CIRCLE_PALETTE.map(col=>(<div key={col} onClick={()=>setCircColor(col)} style={{width:32,height:32,background:col,cursor:"pointer",border:circColor===col?"3px solid "+INK:"3px solid transparent",borderRadius:2,transition:"border 0.1s",boxSizing:"border-box"}}/>))}</div>
@@ -1443,6 +1462,7 @@ function UnfoldModal({note}){
 }
 
 function EditCircleModal({circle,onSave,onClose}){
+  var openedAt=useRef(Date.now());
   var [name,setName]=useState(circle.name);
   var [ctype,setCtype]=useState(circle.type);
   var [color,setColor]=useState(circleColor(circle));
@@ -1476,7 +1496,7 @@ function EditCircleModal({circle,onSave,onClose}){
 
   return(
     <Portal>
-      <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(10,10,10,0.55)",display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={onClose}>
+      <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(10,10,10,0.55)",display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>{if(Date.now()-openedAt.current>350)onClose();}}>
         <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:430,margin:"0 auto",padding:"24px 22px 36px",boxShadow:"0 -4px 0 "+INK,maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
           <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:18}}>Edit Circle</div>
 
@@ -1518,7 +1538,7 @@ function EditCircleModal({circle,onSave,onClose}){
           <div style={{marginBottom:ctype==="hidden"?18:24}}>
             <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Governance</div>
             <div style={{display:"flex",border:"2px solid "+INK}}>
-              {[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"10px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:5}}><FistIcon size={13} color={sel?BG:INK}/> Democracy</span>:"Admin Rule"}</button>);})}
+              {[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"10px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:5}}><FistIcon size={13} color={sel?BG:INK}/> Democracy</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><SpectaclesIcon size={11} color={sel?BG:INK}/> Admin Rule</span>}</button>);})}
             </div>
           </div>
 
@@ -2016,7 +2036,7 @@ export default function App(){
       <div style={{padding:"16px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",gap:14,minHeight:56}}>
         <button onClick={()=>setSelectedChat(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,padding:"0 8px 0 0",minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>&#8592;</button>
         <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}><div style={{width:11,height:11,borderRadius:"50%",background:chatColor,flexShrink:0}}/><div><div style={{fontWeight:900,fontSize:15,letterSpacing:1,textTransform:"uppercase",color:INK}}>{selectedChat.name}</div><div style={{fontSize:10,color:INK_MID,letterSpacing:.8,marginTop:2}}>{selectedChat.type.toUpperCase()} · {selectedChat.dist}mi</div></div></div>
-        {selectedChat.isOwn&&<button onClick={()=>setEditingCircle(liveChat)} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",padding:"5px 10px",cursor:"pointer",minHeight:32,flexShrink:0}}>Edit</button>}
+        {selectedChat.isOwn&&<button onClick={e=>{e.stopPropagation();setEditingCircle(liveChat);}} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",padding:"5px 10px",cursor:"pointer",minHeight:32,flexShrink:0}}>Edit</button>}
       </div>
       {selectedChat.tags&&selectedChat.tags.length>0&&<div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:6,flexWrap:"wrap"}}>{selectedChat.tags.map(t=><span key={t} style={{fontSize:8,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",border:"1px solid "+INK_LIGHT,padding:"2px 7px",color:INK_MID}}>{t}</span>)}</div>}
       <div style={{flex:1,padding:"16px 18px",overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>{msgs.map((m,i)=>(<div key={m.id||i} style={{paddingBottom:10,borderBottom:"1px solid "+INK_LIGHT}}><div style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:m.senderId===currentUser.id?INK:INK_MID,marginBottom:3}}>{m.senderId===currentUser.id?"You":m.senderHandle}</div><div style={{fontSize:14,lineHeight:1.65,color:INK}}>{m.text}</div></div>))}{msgs.length===0&&<div style={{color:INK_MID,fontSize:13,fontStyle:"italic"}}>No messages yet. Say something.</div>}</div>
@@ -2175,7 +2195,7 @@ export default function App(){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:11,height:11,borderRadius:"50%",flexShrink:0,background:c.type==="open"?color:"none",border:"2px "+(c.type==="hidden"?"dashed":"solid")+" "+color}}/>
-              <div><div style={{fontWeight:900,fontSize:14,color:INK}}>{isHidden&&!isJoined?"???":c.name}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,display:"flex",alignItems:"center",gap:4}}>{c.dist}mi{c.members?" · "+c.members+" members":""}{c.governance&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}> · {c.governance.mode==="democracy"?<FistIcon size={14}/>:"◈"}</span>}</div></div>
+              <div><div style={{fontWeight:900,fontSize:14,color:INK}}>{isHidden&&!isJoined?"???":c.name}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,display:"flex",alignItems:"center",gap:4}}>{c.dist}mi{c.members?" · "+c.members+" members":""}{c.governance&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}> · {c.governance.mode==="democracy"?<FistIcon size={14}/>:<SpectaclesIcon size={12}/>}</span>}</div></div>
             </div>
             <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",border:"1.5px "+(c.type==="hidden"?"dashed":"solid")+" "+color,padding:"4px 8px",color:c.type==="open"?BG:color,background:c.type==="open"?color:"none",flexShrink:0}}>{isHidden?(isJoined?"hidden":"?"):c.type}</div>
           </div>
