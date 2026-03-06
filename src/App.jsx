@@ -934,7 +934,7 @@ function CreateFlow({onComplete,onCancel}){
         <span style={{fontSize:11,color:INK,fontWeight:700,letterSpacing:.5}}>{name||"Your circle"}</span>
       </div>
       <div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(4)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(ctype==="hidden"?6:99)} style={{...bb,flex:2,background:INK,color:BG}}>{ctype==="hidden"?"Continue →":"Plant Circle"}</button></div>
-    </div>)}
+    </div></div>)}
     {step===6&&ctype==="hidden"&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:28}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Set the passphrase</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Optional. A secret phrase to enter.</div></div><input ref={inputRef} value={passphrase} onChange={e=>setPassphrase(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")handleCreate();}} placeholder="velvet fog..." maxLength={48} style={{...ii,fontSize:18,fontWeight:700,fontStyle:"italic",padding:"8px 0"}}/><div style={{display:"flex",gap:10}}><button onClick={()=>setStep(5)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={handleCreate} style={{...bb,flex:2,background:INK,color:BG}}>Plant Circle</button></div></div>)}
   </div>);
 }
