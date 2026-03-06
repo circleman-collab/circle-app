@@ -1,2303 +1,732 @@
+// Root orchestrator — all state lives here, views are purely presentational.
+// No JSX markup beyond layout shell and modal/overlay composition.
+
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { createPortal } from "react-dom";
-
-// Renders children into document.body, completely outside the flex layout chain.
-// This prevents iOS Safari from collapsing the app layout during keyboard transitions.
-function Portal({children}){
-  var [el]=useState(()=>document.createElement("div"));
-  useEffect(()=>{document.body.appendChild(el);return()=>document.body.removeChild(el);},[el]);
-  return createPortal(children,el);
-}
-
-const BG="#f0ece3", BG_OUTER="#e8e5de", INK="#0a0a0a", INK_LIGHT="#bfb9ae", INK_MID="#6b6860";
-const font="'Helvetica Neue', Arial, sans-serif";
-const DRAFT_COLORS={1:"#7a6a3a",2:"#3a5a4a",3:"#4a3a6a",4:"#7a3a3a",5:"#3a5a6a",6:"#6a4a3a"};
-const CIRCLE_PALETTE=[
-  "#7a6a3a", // warm ochre
-  "#3a5a4a", // forest
-  "#4a3a6a", // dusk purple
-  "#7a3a3a", // terracotta
-  "#3a5a6a", // slate blue
-  "#6a4a3a", // raw umber
-  "#4a6a3a", // sage
-  "#5a3a5a", // plum
-  "#3a4a6a", // midnight
-  "#6a5a3a", // sand
-];
-function circleColor(circle){return circle.color||(DRAFT_COLORS[Math.abs(tagSeed(circle.tags))%6+1]||INK);}
-const HOLD_MS=1500, PLANT_MS=1200;
-const TAG_SUGGESTIONS=["jazz","night runs","street food","vinyl","cycling","coffee","art","dogs","books","film","hiking","music","food","gaming","photography","design","travel","cooking","fitness","tech","poetry","theatre","yoga","climbing","skateboarding"];
-const NOTE_MAX_CHARS=100;
-const NOTE_MAX_UNPLACED=7;
-const NOTE_FADE_DAYS=15;
-const NOTE_EXPIRE_DAYS=30;
-const NOTE_BG="#f5f0e0"; // aged paper — warm but not yellow
-const ALL_INTEREST_TAGS=["coffee","music","art","books","film","cycling","dogs","food","hiking","jazz","vinyl","gaming","photography","design","travel","cooking","fitness","tech","poetry","theatre","yoga","climbing","skateboarding","night runs","street food"];
-
-const DEFAULT_PRESETS=[
-  "got a window seat",
-  "killing time",
-  "open to weird conversations",
-  "have 20 minutes",
-  "just passing through",
-  "here for a while",
-];
-
-const NEARBY_USERS=[
-  {id:"user_nearby_1",handle:"@maren",displayName:"Maren",tags:["vinyl","coffee","film","art","cycling"],status:"got a window seat and nowhere to be",angle:-80,r:95,
-   responses:["didn't expect a ping right now","what are you doing around here?","good timing actually","i've been sitting here for an hour, say something interesting","this seat's been mine for the last two coffees"]},
-  {id:"user_nearby_2",handle:"@sol",displayName:"Sol",tags:["music","food","night runs","design","gaming"],status:"open to conversation",angle:40,r:120,
-   responses:["hey, what's up","yeah i'm around","what made you reach out?","been a slow night honestly","open to it, what do you have in mind"]},
-  {id:"user_nearby_3",handle:"@fitz",displayName:"Fitz",tags:["books","jazz","coffee","hiking","photography"],status:"reading, but happy to look up",angle:130,r:85,
-   responses:["i'll fold the page","what's going on over there","interesting timing","you pulled me out of a good chapter, worth it?","alright, you've got my attention"]},
-  {id:"user_nearby_4",handle:"@yuna",displayName:"Yuna",tags:["yoga","art","cooking","travel","tea"],status:"thirty minutes before my next thing",angle:-30,r:110,
-   responses:["clock's ticking, make it count","i was just thinking about leaving","okay i'm listening","what's the move","thirty minutes, go"]},
-];
-
-const PULSE_CIRCLES=[
-  {id:"pc_1",name:"The Still Room",tags:["jazz","vinyl","coffee"],passphrase:"after midnight",angle:55,r:100,members:7,governance:{mode:"admin",admins:["user_still"]},type:"hidden",pulseable:true},
-  {id:"pc_2",name:"Fold & Gather",tags:["art","design","books"],passphrase:"",angle:-100,r:130,members:12,governance:{mode:"democracy",admins:[]},type:"hidden",pulseable:true},
-  {id:"pc_3",name:"The Back Channel",tags:["music","film","gaming"],passphrase:"signal lost",angle:160,r:90,members:4,governance:{mode:"admin",admins:["user_bc"]},type:"hidden",pulseable:true},
-];
-
-function tagSeed(tags){var s=0;(tags||[]).forEach(t=>{for(var i=0;i<t.length;i++)s=(s*31+t.charCodeAt(i))>>>0;});return s;}
-function seededRand(seed,i){var x=Math.sin(seed+i*127.1)*43758.5453123;return x-Math.floor(x);}
-
-function genAvatarPath(tags,size){
-  var n=tags.length,seed=tagSeed(tags),cx=size/2,cy=size/2;
-  var reveal=Math.max(0.15,n/9); // always show something even with 0 tags
-  var sr=seededRand; // shorthand
-
-  // Base radius varies by seed — some avatars are bigger, some compact
-  var baseR=size*(0.28+sr(seed,99)*0.12);
-
-  // Pull count: 2–8, influenced by tag count for complexity
-  var minPulls=2,maxPulls=3+Math.floor(n/2);
-  var numPulls=minPulls+Math.floor(sr(seed,0)*(maxPulls-minPulls+1));
-
-  // Pulls: mix of deep inward dents and outward spikes
-  var pulls=[];
-  for(var p=0;p<numPulls;p++){
-    var angle=(p/numPulls)*Math.PI*2+sr(seed,p+1)*1.4-0.7;
-    var isSpike=sr(seed,p+60)>0.55; // ~45% chance of outward spike
-    var depth=isSpike
-      ?-size*(0.06+sr(seed,p+10)*0.14)  // outward spike
-      : size*(0.08+sr(seed,p+10)*0.22); // inward dent — deeper than before
-    var width=0.18+sr(seed,p+20)*0.55;  // wider range — some tight, some broad
-    pulls.push({angle,depth,width,isSpike});
-  }
-
-  // High-frequency noise for texture — varies per seed
-  var noiseAmp=size*(0.005+sr(seed,77)*0.018);
-  var noiseFreq=Math.floor(5+sr(seed,78)*14);
-
-  var steps=120,d="";
-  for(var i=0;i<=steps;i++){
-    var t=(i/steps)*Math.PI*2,pullTotal=0;
-    for(var pi=0;pi<pulls.length;pi++){
-      var diff=t-pulls[pi].angle;
-      while(diff>Math.PI)diff-=Math.PI*2;
-      while(diff<-Math.PI)diff+=Math.PI*2;
-      pullTotal+=Math.exp(-(diff*diff)/(2*pulls[pi].width*pulls[pi].width))*pulls[pi].depth;
-    }
-    var noise=noiseAmp*Math.sin(t*noiseFreq+seed%6.28);
-    var wr=baseR-pullTotal*reveal+noise*reveal;
-    d+=(i===0?"M ":"L ")+(cx+wr*Math.cos(t-Math.PI/2)).toFixed(2)+" "+(cy+wr*Math.sin(t-Math.PI/2)).toFixed(2)+" ";
-  }
-  return d+"Z";
-}
-
-function genAvatarParticles(count,size,grand){
-  var pts=[],n=grand?count*2:count;
-  for(var i=0;i<n;i++){var a=(i/n)*Math.PI*2+(Math.random()-.5)*0.6;pts.push({angle:a,dist:size*(grand?0.28+Math.random()*0.42:0.18+Math.random()*0.28),size:size*(grand?0.022+Math.random()*0.038:0.018+Math.random()*0.028),delay:Math.random()*(grand?0.32:0.2),drift:(Math.random()-.5)*size*(grand?0.1:0.06),driftFreq:2+Math.random()*3});}
-  return pts;
-}
-
-// FIX 2: Added flexShrink:0 to SVG style
-function StaticAvatar({tags,size=24,color=INK,bg=BG}){
-  var path=genAvatarPath(tags,size),cx=size/2,cy=size/2,strokeW=size*0.032*(0.6+(tags.length/9)*0.5);
-  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{display:"block",flexShrink:0}}><path d={path} fill="none" stroke={color} strokeWidth={strokeW}/><circle cx={cx} cy={cy} r={size*0.085} fill={color}/><circle cx={cx} cy={cy} r={size*0.038} fill={bg}/></svg>);
-}
-
-// FIX 3: Added flexShrink:0 to SVG style
-function UserAvatar({tags,size=40,color=INK,bg=BG,burst=false,grand=false,animStyle=0,onBurstEnd}){
-  var path=useMemo(()=>genAvatarPath(tags,size),[tags.join(","),size]);
-  var cx=size/2,cy=size/2,n=tags.length;
-  var breatheAmp=0.018+(n/9)*0.055,breatheSpeed=0.018+(n/9)*0.014;
-  var [breathe,setBreathe]=useState(1);
-  var breatheRaf=useRef(null),breatheT=useRef(Math.random()*Math.PI*2);
-  useEffect(()=>{function loop(){breatheT.current+=breatheSpeed;setBreathe(1+breatheAmp*Math.sin(breatheT.current));breatheRaf.current=requestAnimationFrame(loop);}breatheRaf.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(breatheRaf.current);},[breatheAmp,breatheSpeed]);
-  var [particles,setParticles]=useState(null),[burstProg,setBurstProg]=useState(0),[expand,setExpand]=useState(1),[rotate,setRotate]=useState(0);
-  var burstRaf=useRef(null),burstStart=useRef(null);
-  // animStyle: 0=pop, 1=spin, 2=scatter, 3=ripple
-  var BURST_DUR=grand?1100:animStyle===3?900:animStyle===2?750:620;
-  useEffect(()=>{
-    if(!burst)return;
-    var pCount=animStyle===2?28:18;
-    setParticles(genAvatarParticles(pCount,size,grand));
-    setBurstProg(0);setExpand(1);setRotate(0);
-    burstStart.current=performance.now();
-    function tick(){
-      var p=Math.min(1,(performance.now()-burstStart.current)/BURST_DUR);
-      setBurstProg(p);
-      if(animStyle===0||grand){
-        // pop: expand then contract
-        var ep=p<0.18?p/0.18:1-((p-0.18)/0.82);
-        setExpand(1+ep*(grand?0.13:0.08));
-      } else if(animStyle===1){
-        // spin: rotate while expanding slightly then settling
-        setRotate(p*p*22);
-        setExpand(1+Math.sin(p*Math.PI)*0.1);
-      } else if(animStyle===2){
-        // scatter: quick small pop, particles do the work
-        setExpand(1+Math.sin(p*Math.PI)*0.05);
-      } else if(animStyle===3){
-        // ripple: expands and stays large, slowly deflates
-        setExpand(1+Math.sin(Math.min(p,0.5)*Math.PI)*0.15);
-      }
-      if(p<1){burstRaf.current=requestAnimationFrame(tick);}
-      else{setParticles(null);setBurstProg(0);setExpand(1);setRotate(0);onBurstEnd&&onBurstEnd();}
-    }
-    burstRaf.current=requestAnimationFrame(tick);
-    return()=>cancelAnimationFrame(burstRaf.current);
-  },[burst]);
-  var strokeW=size*0.032*(0.6+(n/9)*0.5);
-  var particleDistMult=animStyle===2?1.6:1;
-  return(<svg width={size} height={size} viewBox={"0 0 "+size+" "+size} style={{overflow:"visible",flexShrink:0}}>
-    {grand&&burst&&burstProg>0&&[0,0.15,0.3].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.7));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.36+rp*0.55)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.022} opacity={(1-rp)*0.5} style={{pointerEvents:"none"}}/>;})}
-    {/* Ripple style rings */}
-    {animStyle===3&&burst&&burstProg>0&&[0,0.2].map((off,i)=>{var rp=Math.max(0,Math.min(1,(burstProg-off)/0.8));if(rp<=0)return null;return <circle key={i} cx={cx} cy={cy} r={size*(0.3+rp*0.6)} fill="none" stroke={color} strokeWidth={(1-rp)*size*0.018} opacity={(1-rp)*0.4} style={{pointerEvents:"none"}}/>;})
-    }
-    {particles&&particles.map((p,i)=>{
-      var lp=Math.max(0,Math.min(1,(burstProg-p.delay)/(1-p.delay)));
-      if(lp<=0)return null;
-      var e=Math.pow(lp,animStyle===2?0.4:0.5);
-      var dist=p.dist*particleDistMult;
-      var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;
-      var px=cx+Math.cos(p.angle)*dist*e+Math.cos(pa)*lat;
-      var py=cy+Math.sin(p.angle)*dist*e+Math.sin(pa)*lat;
-      var fadeExp=animStyle===2?0.55:grand?0.7:0.9;
-      return <circle key={i} cx={px} cy={py} r={Math.max(0.1,p.size*(1-e*0.5))} fill={color} opacity={Math.pow(1-e,fadeExp)*(grand?0.95:0.85)} style={{pointerEvents:"none"}}/>;
-    })}
-    <g transform={`translate(${cx},${cy}) scale(${breathe*expand}) rotate(${rotate}) translate(${-cx},${-cy})`}>
-      <path d={path} fill="none" stroke={color} strokeWidth={strokeW}/>
-      <circle cx={cx} cy={cy} r={size*0.085} fill={color}/>
-      <circle cx={cx} cy={cy} r={size*0.038} fill={bg}/>
-    </g>
-  </svg>);
-}
-
-function genCoalesceParticles(count,tx,ty){
-  var pts=[];
-  for(var i=0;i<count;i++){
-    var spawnX,spawnY,edge=Math.floor(Math.random()*4);
-    if(edge===0){spawnX=-20+Math.random()*390;spawnY=-30+Math.random()*60;}
-    else if(edge===1){spawnX=-20+Math.random()*390;spawnY=390+Math.random()*60;}
-    else if(edge===2){spawnX=-40+Math.random()*60;spawnY=-20+Math.random()*460;}
-    else{spawnX=330+Math.random()*60;spawnY=-20+Math.random()*460;}
-    pts.push({sx:spawnX,sy:spawnY,tx,ty,size:0.6+Math.random()*2.0,delay:Math.random()*0.5,drift:(Math.random()-.5)*18,driftFreq:1+Math.random()*2,speed:0.55+Math.random()*0.45});
-  }
-  return pts;
-}
-
-function CoalesceParticles({progress,particles}){
-  if(!particles||progress<=0)return null;
-  return <g style={{pointerEvents:"none"}}>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/((1-p.delay)*p.speed)));if(lp<=0)return null;var e=Math.pow(Math.min(1,lp),0.55),lat=p.drift*Math.sin(e*Math.PI*p.driftFreq);var perpX=-(p.ty-p.sy),perpY=(p.tx-p.sx),len=Math.sqrt(perpX*perpX+perpY*perpY)||1;var nx=perpX/len,ny=perpY/len;var x=p.sx+(p.tx-p.sx)*e+nx*lat*(1-e),y=p.sy+(p.ty-p.sy)*e+ny*lat*(1-e);var fadeIn=Math.min(1,lp*3),fadeOut=e>0.82?Math.pow(1-(e-0.82)/0.18,0.6):1;return <circle key={i} cx={x} cy={y} r={Math.max(0.1,p.size*(1-e*0.5))} fill={INK} opacity={fadeIn*fadeOut*0.8}/>;})}</g>;
-}
-
-function useTremor(active,freq,amp){
-  var [offset,setOffset]=useState(0);
-  var rafRef=useRef(null);
-  useEffect(()=>{
-    if(!active){cancelAnimationFrame(rafRef.current);setOffset(0);return;}
-    function loop(){setOffset(Math.sin(performance.now()/freq)*amp);rafRef.current=requestAnimationFrame(loop);}
-    rafRef.current=requestAnimationFrame(loop);
-    return()=>cancelAnimationFrame(rafRef.current);
-  },[active,freq,amp]);
-  return offset;
-}
-
-function FloatingTagDisplay({tag,index}){
-  var [offset,setOffset]=useState({x:0,y:0}),[opacity,setOpacity]=useState(0),[scale,setScale]=useState(0.5);
-  var rafRef=useRef(null),startTime=useRef(Date.now()),phase=useRef(index*1.3+Math.random()*Math.PI*2);
-  useEffect(()=>{
-    var t0=Date.now();
-    function animate(){var ep=Math.min(1,(Date.now()-t0)/400),e=1-Math.pow(1-ep,3);setOpacity(e);setScale(0.5+e*0.5);if(ep<1){rafRef.current=requestAnimationFrame(animate);}else{function drift(){var t=(Date.now()-startTime.current)/1000;setOffset({x:Math.sin(t*0.7+phase.current)*5,y:Math.cos(t*0.5+phase.current*1.3)*3.5});rafRef.current=requestAnimationFrame(drift);}rafRef.current=requestAnimationFrame(drift);}}
-    rafRef.current=requestAnimationFrame(animate);
-    return()=>cancelAnimationFrame(rafRef.current);
-  },[]);
-  return <div style={{transform:`translate(${offset.x}px,${offset.y}px) scale(${scale})`,opacity,display:"inline-flex",alignItems:"center",padding:"5px 11px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:INK_MID,border:"1.5px solid "+INK_LIGHT,background:BG}}>{tag}</div>;
-}
-
-function NearbyUserMarker({user,cx,cy,progress,onClick}){
-  var x=cx+user.r*Math.cos((user.angle*Math.PI)/180),y=cy+user.r*Math.sin((user.angle*Math.PI)/180);
-  var held=progress>=0.60&&progress<0.82,resolved=progress>=0.82;
-  var heldP=held?Math.min(1,(progress-0.60)/0.18):0,resolveP=resolved?Math.min(1,(progress-0.82)/0.18):0;
-  var tremor=useTremor(held,55,1.8*heldP*(1-heldP));
-  var tx2=x+tremor,ty2=y+tremor*0.6;
-  if(!held&&!resolved)return null;
-  var markerOp=held?heldP*0.45:resolveP;
-  return(<g style={{pointerEvents:resolveP>=1?"auto":"none"}} onClick={()=>resolveP>=1&&onClick(user)}>
-    <circle cx={tx2} cy={ty2} r={22} fill="transparent"/>
-    <circle cx={tx2} cy={ty2} r={10+heldP*4} fill="none" stroke={INK} strokeWidth="0.8" opacity={held?heldP*0.2:resolveP*0.35} strokeDasharray="2 3"/>
-    <circle cx={tx2} cy={ty2} r={7} fill={BG} stroke={INK} strokeWidth={held?"1":"1.5"} opacity={markerOp} strokeDasharray="2.5 2"/>
-    <g opacity={markerOp} style={{pointerEvents:"none"}}><path d={genAvatarPath(user.tags,14)} transform={`translate(${tx2-7},${ty2-7})`} fill="none" stroke={INK} strokeWidth="0.8"/></g>
-    <text x={tx2} y={ty2-13} textAnchor="middle" fontSize="7" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={resolveP}>{user.handle.toUpperCase()}</text>
-  </g>);
-}
-
-function NearbyCircleMarker({circle,cx,cy,progress,onClick}){
-  var x=cx+circle.r*Math.cos((circle.angle*Math.PI)/180),y=cy+circle.r*Math.sin((circle.angle*Math.PI)/180);
-  var held=progress>=0.60&&progress<0.82,resolved=progress>=0.82;
-  var heldP=held?Math.min(1,(progress-0.60)/0.18):0,resolveP=resolved?Math.min(1,(progress-0.82)/0.18):0;
-  var tremor=useTremor(held,60,2.0*heldP*(1-heldP));
-  var tx=x+tremor,ty=y+tremor*0.7;
-  if(!held&&!resolved)return null;
-  var op=held?heldP*0.45:resolveP;
-  var color=circleColor(circle);
-  var R=10,hatch=[];
-  for(var i=-R;i<=R;i+=3.5){var hw=Math.sqrt(Math.max(0,R*R-i*i));hatch.push(<line key={i} x1={tx-hw} y1={ty+i} x2={tx+hw} y2={ty+i} stroke={color} strokeWidth="0.7" opacity={0.5}/>);}
-  return(<g style={{pointerEvents:resolveP>=1?"auto":"none"}} onClick={()=>resolveP>=1&&onClick(circle)}>
-    <circle cx={tx} cy={ty} r={22} fill="transparent"/>
-    {held&&<circle cx={tx} cy={ty} r={R+8*heldP} fill="none" stroke={color} strokeWidth="1" opacity={heldP*0.3}/>}
-    <clipPath id={"pcclip"+circle.id}><circle cx={tx} cy={ty} r={R}/></clipPath>
-    <g clipPath={"url(#pcclip"+circle.id+")"} opacity={op}>{hatch}</g>
-    <circle cx={tx} cy={ty} r={R} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="3 2.5" opacity={op}/>
-    <text x={tx} y={ty+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font} opacity={op}>?</text>
-    <text x={tx} y={ty-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={resolveP}>{circle.name.toUpperCase()}</text>
-  </g>);
-}
-
-function SpontaneousCircleSheet({currentUser,otherUser,sharedTags,onCreate,onDismiss}){
-  var [visible,setVisible]=useState(false);
-  var names=[currentUser.displayName,otherUser.displayName].sort();
-  var autoName=names[0]+" & "+names[1]+"'s Circle";
-  var [circleName,setCircleName]=useState(autoName);
-  var inputRef=useRef(null);
-  useEffect(()=>{var t=setTimeout(()=>{setVisible(true);setTimeout(()=>inputRef.current&&inputRef.current.focus(),350);},80);return()=>clearTimeout(t);},[]);
-  var tags=sharedTags.length>0?sharedTags:otherUser.tags.slice(0,4);
-  function handleCreate(){onCreate({name:circleName.trim()||autoName,tags,type:"closed",governance:{mode:"admin",admins:[]},passphrase:"",pulseable:false});}
-  return(<Portal><div style={{position:"fixed",bottom:0,left:0,width:"100vw",zIndex:200,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 32px",boxShadow:"0 -4px 0 "+INK,boxSizing:"border-box",maxWidth:430,margin:"0 auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Start a Circle</div>
-        <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:0}}>×</button>
-      </div>
-      <input ref={inputRef} value={circleName} onChange={e=>setCircleName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")handleCreate();}} maxLength={48} style={{background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%",fontSize:17,fontWeight:900,padding:"6px 0",letterSpacing:0.5,marginBottom:10}}/>
-      <div style={{fontSize:9,color:INK_MID,marginBottom:tags.length>0?16:22}}>Private · admin rule · {tags.length>0?"your shared tags":"no shared tags yet"}</div>
-      {tags.length>0&&(<div style={{marginBottom:20}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:10}}>Starting from</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,minHeight:36}}>{tags.map((t,i)=><FloatingTagDisplay key={t} tag={t} index={i}/>)}</div>
-      </div>)}
-      <button onClick={handleCreate} style={{width:"100%",background:INK,color:BG,border:"none",padding:"14px 0",fontFamily:font,fontWeight:700,fontSize:11,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Create Circle →</button>
-    </div>
-  </div></Portal>);
-}
-
-const PULSE_CHAT_LIMIT=7;
-function PulseChat({currentUser,otherUser,onStartCircle,onConnect,onDismiss}){
-  var [msgs,setMsgs]=useState([]);
-  var [input,setInput]=useState("");
-  var [faded,setFaded]=useState(false);
-  var [isTyping,setIsTyping]=useState(false);
-  var inputRef=useRef(null);
-  var msgsRef=useRef(null);
-  var responseIdx=useRef(0);
-  var sharedTags=(currentUser.tags||[]).filter(t=>(otherUser.tags||[]).includes(t));
-  var remaining=PULSE_CHAT_LIMIT-msgs.length;
-  var locked=remaining<=0||faded;
-  useEffect(()=>{if(inputRef.current&&!locked)inputRef.current.focus();},[locked]);
-  useEffect(()=>{if(msgsRef.current)msgsRef.current.scrollTop=msgsRef.current.scrollHeight;},[msgs,isTyping]);
-  function send(){
-    if(!input.trim()||locked)return;
-    var nm={id:Math.random().toString(36).slice(2),senderId:currentUser.id,senderHandle:currentUser.handle,text:input.trim()};
-    var next=[...msgs,nm];
-    setMsgs(next);
-    setInput("");
-    if(next.length>=PULSE_CHAT_LIMIT){setFaded(true);return;}
-    var pool=otherUser.responses||["..."];
-    setIsTyping(true);
-    setTimeout(()=>{
-      setIsTyping(false);
-      var resp=pool[responseIdx.current%pool.length];
-      responseIdx.current++;
-      var rm={id:Math.random().toString(36).slice(2),senderId:otherUser.id,senderHandle:otherUser.handle,text:resp};
-      setMsgs(prev=>{var updated=[...prev,rm];if(updated.length>=PULSE_CHAT_LIMIT)setFaded(true);return updated;});
-    },850+Math.random()*600);
-  }
-  return(<div style={{flex:1,display:"flex",flexDirection:"column",background:BG}}>
-    <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",gap:12,minHeight:56}}>
-      <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",padding:"0 8px 0 0"}}>←</button>
-      <StaticAvatar tags={otherUser.tags} size={30} color={INK} bg={BG}/>
-      <div style={{flex:1}}>
-        <div style={{fontWeight:900,fontSize:14,letterSpacing:1,color:INK}}>{otherUser.displayName}</div>
-        {otherUser.status&&<div style={{fontSize:10,color:INK_MID,fontStyle:"italic"}}>"{otherUser.status}"</div>}
-      </div>
-      <div style={{textAlign:"right"}}>
-        <div style={{fontSize:16,fontWeight:900,color:faded?INK_LIGHT:remaining<=2?INK:INK_MID}}>{remaining}</div>
-        <div style={{fontSize:7,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",color:INK_LIGHT}}>left</div>
-      </div>
-    </div>
-    <div ref={msgsRef} style={{flex:1,padding:"16px 18px",overflowY:"auto",overscrollBehavior:"contain",display:"flex",flexDirection:"column",gap:10,position:"relative"}}>
-      {msgs.length===0&&(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16}}>
-        {otherUser.status&&<div style={{fontSize:12,color:INK_MID,fontStyle:"italic",textAlign:"center",padding:"8px 16px",border:"1px solid "+INK_LIGHT}}>"{otherUser.status}"</div>}
-        <div style={{fontSize:11,color:INK_MID,textAlign:"center",lineHeight:1.9,maxWidth:220}}>A temporary channel.<br/>{PULSE_CHAT_LIMIT} messages to figure out what this is.</div>
-        {sharedTags.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center",marginTop:8}}>{sharedTags.map((t,i)=><FloatingTagDisplay key={t} tag={t} index={i}/>)}</div>}
-      </div>)}
-      {msgs.map((m,i)=>(
-        <div key={m.id||i} style={{display:"flex",flexDirection:"column",alignItems:m.senderId===currentUser.id?"flex-end":"flex-start",gap:3}}>
-          <div style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK_MID}}>{m.senderId===currentUser.id?"You":m.senderHandle}</div>
-          <div style={{fontSize:14,lineHeight:1.6,color:INK,maxWidth:"78%",textAlign:m.senderId===currentUser.id?"right":"left"}}>{m.text}</div>
-        </div>
-      ))}
-      {isTyping&&(<div style={{display:"flex",alignItems:"center",gap:5,opacity:0.5}}>
-        <div style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK_MID}}>{otherUser.handle}</div>
-        <div style={{fontSize:12,color:INK_MID,letterSpacing:2}}>···</div>
-      </div>)}
-      {faded&&(<div style={{marginTop:12,padding:"14px 0",borderTop:"1px solid "+INK_LIGHT,display:"flex",flexDirection:"column",gap:12,alignItems:"center"}}>
-        <div style={{fontSize:11,color:INK_MID,fontStyle:"italic",textAlign:"center"}}>This pulse faded.</div>
-        <button onClick={()=>onStartCircle(otherUser,sharedTags)} style={{background:INK,color:BG,border:"none",padding:"12px 24px",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Start a Circle →</button>
-      </div>)}
-    </div>
-    <div style={{padding:"10px 18px",borderTop:"1px solid "+INK_LIGHT,display:"flex",gap:8}}>
-      <button onClick={()=>onStartCircle(otherUser,sharedTags)} style={{flex:1,background:"none",border:"1.5px solid "+INK,color:INK,padding:"10px 0",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>Start a Circle →</button>
-      <button onClick={onConnect} style={{flex:1,background:"none",border:"1.5px solid "+INK_LIGHT,color:INK_MID,padding:"10px 0",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>Connect →</button>
-    </div>
-    {!locked&&(<div style={{padding:"10px 18px 16px",borderTop:"1.5px solid "+INK,display:"flex",gap:10,alignItems:"center"}}>
-      <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")send();}} placeholder="Say something..." style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:16,color:INK,padding:"6px 0"}}/>
-      <button onClick={send} style={{background:INK,color:BG,border:"none",padding:"10px 14px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1.5,minHeight:44}}>SEND</button>
-    </div>)}
-  </div>);
-}
-
-function PulseCheckCard({user,currentUser,onStartPulseChat,onDismiss}){
-  var [visible,setVisible]=useState(false);
-  useEffect(()=>{var t=setTimeout(()=>setVisible(true),80);return()=>clearTimeout(t);},[]);
-  var sharedTags=(currentUser.tags||[]).filter(t=>(user.tags||[]).includes(t));
-  return(<Portal><div style={{position:"fixed",bottom:0,left:0,width:"100vw",zIndex:150,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK,maxWidth:430,margin:"0 auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>◉ Pulse Check</div>
-        <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:0}}>×</button>
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-        <StaticAvatar tags={user.tags} size={44} color={INK} bg={BG}/>
-        <div><div style={{fontWeight:900,fontSize:17,letterSpacing:1,color:INK}}>{user.displayName}</div><div style={{fontSize:10,color:INK_MID,letterSpacing:.8,marginTop:2}}>{user.handle}</div>{user.status&&<div style={{fontSize:11,color:INK,marginTop:5,fontStyle:"italic",lineHeight:1.5}}>"{user.status}"</div>}</div>
-      </div>
-      {sharedTags.length>0&&<div style={{marginBottom:18}}><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:7}}>You both care about</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{sharedTags.map(t=><span key={t} style={{fontSize:9,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",background:INK,color:BG,padding:"3px 9px"}}>{t}</span>)}</div></div>}
-      {sharedTags.length===0&&<div style={{marginBottom:18,fontSize:11,color:INK_MID,fontStyle:"italic"}}>Both open to connection nearby.</div>}
-      <button onClick={()=>onStartPulseChat(user)} style={{width:"100%",background:INK,color:BG,border:"none",padding:"14px 0",fontFamily:font,fontWeight:700,fontSize:11,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Start a Pulse Chat →</button>
-    </div>
-  </div></Portal>);
-}
-
-function CirclePulseCard({circle,currentUser,onJoin,onDismiss}){
-  var [visible,setVisible]=useState(false);
-  useEffect(()=>{var t=setTimeout(()=>setVisible(true),80);return()=>clearTimeout(t);},[]);
-  var sharedTags=(currentUser.tags||[]).filter(t=>(circle.tags||[]).includes(t));
-  var color=circleColor(circle);
-  return(<Portal><div style={{position:"fixed",bottom:0,left:0,width:"100vw",zIndex:150,transform:visible?"translateY(0)":"translateY(100%)",transition:"transform 0.45s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",padding:"22px 22px 28px",boxShadow:"0 -4px 0 "+INK,maxWidth:430,margin:"0 auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>◉ Pulse Check — Hidden Circle</div>
-        <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:0}}>×</button>
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-        <div style={{width:36,height:36,border:"2px dashed "+color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:16,fontWeight:900,color}}>?</span></div>
-        <div><div style={{fontWeight:900,fontSize:17,letterSpacing:1,color:INK}}>{circle.name}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,display:"flex",alignItems:"center",gap:6}}><span>Hidden</span><span>·</span><span>{circle.members} members</span><span>·</span><span>{circle.governance.mode==="democracy"?"Democracy":"Admin rule"}</span></div></div>
-      </div>
-      {circle.tags.length>0&&<div style={{marginBottom:sharedTags.length>0?12:18}}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{circle.tags.map(t=><span key={t} style={{fontSize:9,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",border:"1px solid "+INK_LIGHT,padding:"2px 7px",color:INK_MID}}>{t}</span>)}</div></div>}
-      {sharedTags.length>0&&<div style={{marginBottom:18}}><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:7}}>Matches your interests</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{sharedTags.map(t=><span key={t} style={{fontSize:9,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",background:INK,color:BG,padding:"3px 9px"}}>{t}</span>)}</div></div>}
-      <button onClick={()=>onJoin(circle)} style={{width:"100%",background:INK,color:BG,border:"none",padding:"14px 0",fontFamily:font,fontWeight:700,fontSize:11,letterSpacing:2,textTransform:"uppercase",cursor:"pointer"}}>Try to Get In →</button>
-    </div>
-  </div></Portal>);
-}
-
-function InterestMatchNotif({circle,sharedTags,onGo,onDismiss}){
-  var [visible,setVisible]=useState(false);
-  useEffect(()=>{var t=setTimeout(()=>setVisible(true),60);return()=>clearTimeout(t);},[]);
-  return(<Portal><div style={{position:"fixed",top:0,left:0,width:"100vw",zIndex:120,transform:visible?"translateY(0)":"translateY(-100%)",transition:"transform 0.4s cubic-bezier(0.22,1,0.36,1)"}}>
-    <div style={{background:BG,borderBottom:"2px solid "+INK,padding:"10px 18px",display:"flex",alignItems:"center",gap:10,boxShadow:"0 3px 0 "+INK_LIGHT,maxWidth:430,margin:"0 auto"}}>
-      <div style={{fontSize:12,color:INK_MID,flexShrink:0}}>◉</div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:10,fontWeight:700,color:INK,letterSpacing:.3}}>{circle.name}</div>
-        <div style={{fontSize:9,color:INK_MID,marginTop:1,display:"flex",gap:4,flexWrap:"wrap"}}>{sharedTags.slice(0,3).map(t=><span key={t} style={{background:INK,color:BG,padding:"1px 5px",fontSize:7.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{t}</span>)}<span style={{color:INK_MID}}>nearby</span></div>
-      </div>
-      <button onClick={onGo} style={{background:"none",border:"1px solid "+INK,color:INK,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"5px 10px",flexShrink:0,minHeight:36}}>Show →</button>
-      <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:INK_MID,minWidth:36,minHeight:36,display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>×</button>
-    </div>
-  </div></Portal>);
-}
-
-// ── Status Tab ────────────────────────────────────────────────────────────────
-// FIX 1: Removed the decorative SVG block that was causing iOS Safari layout collapse
-function StatusTab({currentUser,onUpdateStatus,onUpdatePresets}){
-  var [open,setOpen]=useState(false);
-  var [customInput,setCustomInput]=useState("");
-  var [addingCustom,setAddingCustom]=useState(false);
-  var inputRef=useRef(null),triggerRef=useRef(null);
-  var presets=currentUser.statusPresets||DEFAULT_PRESETS;
-  var currentStatus=currentUser.status||"";
-
-  useEffect(()=>{
-    if(addingCustom&&inputRef.current)inputRef.current.focus();
-  },[addingCustom]);
-
-  function selectPreset(p){
-    onUpdateStatus(p);
-    setOpen(false);
-  }
-
-  function clearStatus(){
-    onUpdateStatus("");
-    setOpen(false);
-  }
-
-  function addCustom(){
-    var v=customInput.trim();
-    if(!v)return;
-    var next=[...presets,v];
-    onUpdatePresets(next);
-    onUpdateStatus(v);
-    setCustomInput("");
-    setAddingCustom(false);
-    setOpen(false);
-  }
-
-  function removePreset(p,e){
-    e.stopPropagation();
-    var next=presets.filter(x=>x!==p);
-    onUpdatePresets(next);
-    if(currentStatus===p)onUpdateStatus("");
-  }
-
-  var displayText=currentStatus||"set a status";
-  var hasStatus=!!currentStatus;
-
-  return(
-    <div ref={triggerRef} style={{position:"relative",zIndex:60}}>
-      <div
-        onClick={()=>setOpen(o=>!o)}
-        style={{
-          display:"flex",alignItems:"center",justifyContent:"space-between",
-          padding:"0 18px",height:48,
-          background:open?INK:BG,
-          borderBottom:"2px solid "+INK,
-          cursor:"pointer",
-          transition:"background 0.15s",
-        }}
-      >
-        <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-          <span style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:open?BG:INK_MID,flexShrink:0}}>STATUS</span>
-          <span style={{
-            fontSize:13,fontStyle:hasStatus?"italic":"italic",
-            color:open?BG:(hasStatus?INK:INK_LIGHT),
-            fontWeight:hasStatus?700:400,
-            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-            maxWidth:180,
-          }}>
-            {hasStatus?`"${displayText}"`:`"${displayText}"`}
-          </span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          {hasStatus&&!open&&(
-            <span onClick={e=>{e.stopPropagation();clearStatus();}} style={{fontSize:12,color:INK_LIGHT,cursor:"pointer",lineHeight:1}}>×</span>
-          )}
-          <span style={{fontSize:9,color:open?BG:INK_MID,transition:"transform 0.2s",display:"inline-block",transform:open?"rotate(180deg)":"rotate(0deg)"}}>▾</span>
-        </div>
-      </div>
-
-      {open&&(
-        <div style={{
-          position:"absolute",top:"100%",left:0,right:0,zIndex:1000,
-          background:BG,border:"1.5px solid "+INK,borderTop:"none",
-          boxShadow:"0 4px 0 "+INK_LIGHT,
-          maxHeight:280,overflowY:"auto",
-        }}>
-          {hasStatus&&(
-            <div style={{padding:"8px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID}}>Active</span>
-              <button onClick={clearStatus} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"3px 8px"}}>Clear</button>
-            </div>
-          )}
-
-          {presets.map((p,i)=>{
-            var isActive=p===currentStatus;
-            return(
-              <div
-                key={i}
-                onClick={()=>selectPreset(p)}
-                style={{
-                  display:"flex",alignItems:"center",justifyContent:"space-between",
-                  padding:"11px 16px",
-                  borderBottom:"1px solid "+INK_LIGHT,
-                  cursor:"pointer",
-                  background:isActive?INK:BG,
-                  gap:8,
-                  minHeight:44,
-                }}
-              >
-                <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-                  {isActive&&<span style={{fontSize:8,color:BG,flexShrink:0}}>◉</span>}
-                  <span style={{
-                    fontSize:12,fontStyle:"italic",
-                    color:isActive?BG:INK,
-                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-                  }}>"{p}"</span>
-                </div>
-                {!isActive&&(
-                  <span
-                    onClick={e=>removePreset(p,e)}
-                    style={{fontSize:16,color:INK_LIGHT,cursor:"pointer",flexShrink:0,minWidth:44,minHeight:44,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
-                  >×</span>
-                )}
-              </div>
-            );
-          })}
-
-          {addingCustom?(
-            <div style={{padding:"10px 16px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:8,alignItems:"center"}}>
-              <input
-                ref={inputRef}
-                value={customInput}
-                onChange={e=>setCustomInput(e.target.value.slice(0,50))}
-                onKeyDown={e=>{if(e.key==="Enter")addCustom();if(e.key==="Escape"){setAddingCustom(false);setCustomInput("");}}}
-                placeholder="write your own..."
-                style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:16,fontStyle:"italic",color:INK,padding:"4px 0"}}
-              />
-              <button onClick={addCustom} style={{background:INK,color:BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1,minHeight:44}}>Add</button>
-            </div>
-          ):(
-            <div
-              onClick={()=>setAddingCustom(true)}
-              style={{padding:"11px 16px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:44}}
-            >
-              <span style={{fontSize:12,color:INK_LIGHT,lineHeight:1}}>+</span>
-              <span style={{fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK_MID}}>Add custom</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function makeMessage(text,senderId,senderHandle){return{id:Math.random().toString(36).slice(2),senderId,senderHandle,text,timestamp:Date.now()};}
-function normalizeMsgs(msgs){return(msgs||[]).map(m=>typeof m==="string"?makeMessage(m,"user_unknown","@member"):m);}
-function makeCircle(o){return{id:Date.now(),ownerId:"",name:"",type:"open",pulseable:true,passphrase:"",dist:0,members:1,angle:0,r:80,msgs:[],tags:[],governance:{mode:"admin",admins:[]},pendingRequests:[],inviteCodes:[],isOwn:false,color:null,...o};}
-
-const INIT_CHATS=[
-  makeCircle({id:1,ownerId:"user_meridian",name:"Meridian Coffee",type:"open",dist:0.2,members:12,angle:-55,r:80,msgs:normalizeMsgs(["good espresso today","anyone tried the new pour over?","yes, highly recommend"]),tags:["coffee","morning","local"],governance:{mode:"admin",admins:["user_meridian"]}}),
-  makeCircle({id:2,ownerId:"user_park",name:"Park Regulars",type:"open",dist:0.5,members:34,angle:30,r:140,msgs:normalizeMsgs(["dogs welcome south side","bring frisbees tmr?"]),tags:["outdoors","dogs","weekend"],governance:{mode:"democracy",admins:[]}}),
-  makeCircle({id:3,ownerId:"user_block",name:"Block Watch",type:"closed",dist:0.8,members:8,angle:155,r:170,msgs:normalizeMsgs(["meeting thursday 7pm","confirmed"]),tags:["local","safety","neighbors"],governance:{mode:"admin",admins:["user_block"]}}),
-  makeCircle({id:4,ownerId:"user_unknown",name:"???",type:"hidden",dist:1.1,members:null,angle:-130,r:210,msgs:[],tags:[],pulseable:true,passphrase:"velvet fog",governance:{mode:"admin",admins:["user_unknown"]}}),
-  makeCircle({id:5,ownerId:"user_market",name:"Night Market",type:"open",dist:0.3,members:67,angle:85,r:105,msgs:normalizeMsgs(["opens at 6","cash only tonight"]),tags:["food","night","market"],governance:{mode:"democracy",admins:[]}}),
-  makeCircle({id:6,ownerId:"user_studio",name:"Studio Session",type:"closed",dist:0.9,members:4,angle:-18,r:188,msgs:normalizeMsgs(["tracking starts 8pm"]),tags:["music","recording","creative"],governance:{mode:"admin",admins:["user_studio"]}}),
-];
-
-function wobblyPath(cx,cy,r,seed,steps,amp){steps=steps||120;amp=amp||2.2;var d="";for(var i=0;i<=steps;i++){var t=(i/steps)*Math.PI*2;var wr=r+amp*Math.sin(t*5+seed)+amp*0.4*Math.sin(t*11+seed*0.9);d+=(i===0?"M ":"L ")+(cx+wr*Math.cos(t-Math.PI/2))+" "+(cy+wr*Math.sin(t-Math.PI/2))+" ";}return d+"Z";}
-
-// Andersonville, Chicago — centered on Clark & Foster (41.9763, -87.6686)
-// World space: 1400x1680px. User (Clark & Foster) maps to viewport center (175,210) at world (700,840).
-// Scale: ~1px = 2.2ft, 1 Chicago block ~ 100px world.
-function genBuildings(x1,y1,x2,y2,side,width,depth,gap,seed){
-  var buildings=[];
-  var dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy);
-  var ux=dx/len,uy=dy/len;
-  var nx=-uy,ny=ux;
-  if(side===-1){nx=-nx;ny=-ny;}
-  var pos=gap,rng=seed||1;
-  function rand(){rng=(rng*1664525+1013904223)&0xffffffff;return(rng>>>0)/4294967296;}
-  while(pos+width<len-gap){
-    var bw=width+(rand()-0.5)*width*0.3;
-    var bd=depth+(rand()-0.5)*depth*0.25;
-    buildings.push({x:x1+ux*pos+nx*(5+rand()*2),y:y1+uy*pos+ny*(5+rand()*2),w:bw,h:bd,angle:Math.atan2(uy,ux)*180/Math.PI,nx,ny});
-    pos+=bw+gap+(rand()*gap*0.4);
-  }
-  return buildings;
-}
-
-const CITY_BLOCKS=(()=>{
-  var streets=[],labels=[],buildings=[];
-
-  var ewStreets=[
-    {y:540, name:"BRYN MAWR AVE", major:true},
-    {y:640, name:"BERWYN AVE",    major:false},
-    {y:740, name:"SUMMERDALE AVE",major:false},
-    {y:840, name:"FOSTER AVE",    major:true},
-    {y:940, name:"WINONA ST",     major:false},
-    {y:1040,name:"LAWRENCE AVE",  major:true},
-    {y:1140,name:"LELAND AVE",    major:false},
-    {y:1240,name:"WILSON AVE",    major:true},
-    {y:440, name:"DEVON AVE",     major:true},
-  ];
-
-  var nsStreets=[
-    {x:460, name:"SHERIDAN RD",  major:true},
-    {x:560, name:"BROADWAY",     major:true},
-    {x:760, name:"WINTHROP AVE", major:false},
-    {x:920, name:"ASHLAND AVE",  major:true},
-    {x:1020,name:"MAGNOLIA AVE", major:false},
-    {x:1100,name:"PAULINA ST",   major:false},
-  ];
-
-  ewStreets.forEach(s=>{
-    streets.push({x1:250,y1:s.y,x2:1200,y2:s.y,major:s.major});
-    if(s.name)labels.push({x:258,y:s.y-4,text:s.name,horiz:true});
-    var bw=s.major?18:14, bd=s.major?12:10, bg=s.major?8:10;
-    buildings.push(...genBuildings(280,s.y,1180,s.y, 1,bw,bd,bg,s.y));
-    buildings.push(...genBuildings(280,s.y,1180,s.y,-1,bw,bd,bg,s.y+100));
-  });
-
-  nsStreets.forEach(s=>{
-    streets.push({x1:s.x,y1:350,x2:s.x,y2:1350,major:s.major,vert:true});
-    if(s.name)labels.push({x:s.x,y:362,text:s.name,horiz:false});
-    var bw=s.major?16:13, bd=s.major?12:10, bg=s.major?8:10;
-    buildings.push(...genBuildings(s.x,380,s.x,1320, 1,bw,bd,bg,s.x));
-    buildings.push(...genBuildings(s.x,380,s.x,1320,-1,bw,bd,bg,s.x+200));
-  });
-
-  streets.push({x1:820,y1:1350,x2:560,y2:350,diag:true,major:true,name:"CLARK ST"});
-  labels.push({x:810,y:1310,text:"CLARK ST",horiz:true,diagonal:true});
-  buildings.push(...genBuildings(820,1350,560,350, 1,16,12,7,999));
-  buildings.push(...genBuildings(820,1350,560,350,-1,16,12,7,1337));
-
-  streets.push({x1:560,y1:1350,x2:500,y2:840,diag:true,major:false});
-  streets.push({x1:500,y1:840,x2:460,y2:350,diag:true,major:false});
-
-  var landmarks=[
-    {x:670,y:800,w:90,h:60,name:"ANDERSONVILLE",fill:false},
-    {x:750,y:480,w:180,h:120,name:"WINNEMAC PARK",fill:true},
-    {x:880,y:1080,w:100,h:80,name:"WELLES PARK",fill:true},
-    {x:648,y:818,w:44,h:30,name:"SWEDISH\nMUSEUM",fill:false},
-    {x:720,y:856,w:48,h:28,name:"RAVEN\nTHEATRE",fill:false},
-    {x:547,y:528,w:40,h:24,name:"BRYN MAWR\nCTA",fill:true},
-    {x:547,y:628,w:40,h:24,name:"BERWYN\nCTA",fill:true},
-    {x:547,y:828,w:40,h:24,name:"FOSTER\nCTA",fill:true},
-    {x:547,y:1028,w:40,h:24,name:"LAWRENCE\nCTA",fill:true},
-  ];
-
-  return {streets,labels,landmarks,buildings};
-})();
-function CityMapLayer({panX,panY}){
-  var {streets,labels,landmarks,buildings}=CITY_BLOCKS;
-  var ox=175-700+panX,oy=210-840+panY;
-  function wx(x){return x+ox;} function wy(y){return y+oy;}
-  return(<g style={{pointerEvents:"none"}}>
-    <rect x={wx(0)} y={wy(0)} width={1400} height={1680} fill={BG}/>
-    <rect x={wx(250)} y={wy(350)} width={950} height={1000} fill={BG_OUTER} opacity="0.3"/>
-    {/* Building footprints — rendered before streets so streets sit on top */}
-    {buildings.map((b,i)=>(
-      <rect key={i}
-        x={wx(b.x)} y={wy(b.y)}
-        width={b.w} height={b.h}
-        fill={INK_LIGHT}
-        stroke={INK_MID}
-        strokeWidth="0.4"
-        opacity="0.28"
-        transform={`rotate(${b.angle},${wx(b.x)},${wy(b.y)})`}
-      />
-    ))}
-    {/* Streets on top of buildings */}
-    {streets.map((s,i)=>(
-      <line key={i} x1={wx(s.x1)} y1={wy(s.y1)} x2={wx(s.x2)} y2={wy(s.y2)}
-        stroke={s.major?INK_MID:INK_LIGHT}
-        strokeWidth={s.major?1.4:0.6}
-        opacity={s.diag&&s.major?0.7:s.major?0.55:0.3}/>
-    ))}
-    {/* Landmarks */}
-    {landmarks.map((l,i)=>{
-      var lines=l.name.split("\\n");
-      return(<g key={i}>
-        <rect x={wx(l.x)} y={wy(l.y)} width={l.w} height={l.h}
-          fill={l.fill?INK_LIGHT:BG} stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.5"/>
-        {lines.map((line,j)=>(
-          <text key={j} x={wx(l.x+l.w/2)} y={wy(l.y+l.h/2+(j-(lines.length-1)/2)*7)}
-            textAnchor="middle" fontSize="5" fontWeight="700"
-            fill={INK_MID} fontFamily={font} letterSpacing="0.5" opacity="0.7">{line}</text>
-        ))}
-      </g>);
-    })}
-    {/* Street labels */}
-    {labels.map((l,i)=>{
-      if(l.diagonal){
-        return(<text key={i} x={wx(l.x)} y={wy(l.y)}
-          fontSize="5.5" fontWeight="700" fill={INK_MID} fontFamily={font}
-          letterSpacing="0.8" opacity="0.6"
-          transform={`rotate(-73,${wx(l.x)},${wy(l.y)})`}>{l.text}</text>);
-      }
-      return(<text key={i} x={wx(l.x)} y={wy(l.y)}
-        fontSize="5" fontWeight="600" fill={INK_MID} fontFamily={font}
-        letterSpacing="0.6" opacity="0.5"
-        transform={l.horiz?undefined:`rotate(-90,${wx(l.x)},${wy(l.y)})`}>{l.text}</text>);
-    })}
-  </g>);
-}
-
-function genPulseParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.55;p.push({angle:a,dist:55+Math.random()*110,size:0.8+Math.random()*2.8,delay:Math.random()*.28,drift:(Math.random()-.5)*4.5,driftFreq:1.2+Math.random()*3.5});}return p;}
-function genOutwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.25;p.push({angle:a,travelMult:1.1+Math.random()*1.8,size:.8+Math.random()*2.2,delay:Math.random()*.22,drift:(Math.random()-.5)*3.5,driftFreq:1.5+Math.random()*3,brightness:.4+Math.random()*.6});}return p;}
-function genInwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.4;p.push({angle:a,spawnMult:1.3+Math.random()*1.4,size:.8+Math.random()*1.8,delay:Math.random()*.28,drift:(Math.random()-.5)*2.8,driftFreq:1.5+Math.random()*2.5,brightness:.35+Math.random()*.65});}return p;}
-function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2;var big=i%4===0;var giant=i%12===0;p.push({angle:a+(Math.random()-.5)*.7,scatter:giant?(90+Math.random()*60):big?(55+Math.random()*40):(28+Math.random()*42),size:giant?(2.2+Math.random()*1.6):big?(1.6+Math.random()*1.4):(0.7+Math.random()*1.2),delay:Math.random()*.28,drift:(Math.random()-.5)*4,driftFreq:1.5+Math.random()*3});}return p;}
-
-function FistIcon({size=16,color=INK}){
-  // Classic raised solidarity fist — clean silhouette
-  return(
-    <svg width={size} height={size*1.1} viewBox="0 0 24 26" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}>
-      {/* Fingers — four rounded rectangles side by side, curled */}
-      <rect x={5} y={3} width={4} height={7} rx={2} fill={color}/>
-      <rect x={9.5} y={2} width={4} height={8} rx={2} fill={color}/>
-      <rect x={14} y={3} width={4} height={7} rx={2} fill={color}/>
-      {/* Knuckle bar connecting fingers */}
-      <rect x={5} y={8} width={13} height={3} rx={1} fill={color}/>
-      {/* Palm */}
-      <rect x={5} y={10} width={13} height={8} rx={1.5} fill={color}/>
-      {/* Thumb — tucked against side */}
-      <rect x={1.5} y={12} width={5} height={4} rx={2} fill={color}/>
-      {/* Wrist */}
-      <rect x={6} y={17} width={10} height={5} rx={1} fill={color}/>
-    </svg>
-  );
-}
-
-function SpectaclesIcon({size=16,color=INK}){
-  // Wire-frame spectacles — two lens circles connected by bridge
-  var sw=1.6;
-  return(
-    <svg width={size*1.4} height={size*0.7} viewBox="0 0 32 16" style={{display:"inline-block",verticalAlign:"middle",flexShrink:0}}>
-      {/* Left lens */}
-      <circle cx={8} cy={8} r={6} fill="none" stroke={color} strokeWidth={sw}/>
-      {/* Right lens */}
-      <circle cx={24} cy={8} r={6} fill="none" stroke={color} strokeWidth={sw}/>
-      {/* Bridge */}
-      <path d="M 14 8 Q 16 6 18 8" fill="none" stroke={color} strokeWidth={sw}/>
-      {/* Left temple arm */}
-      <line x1={2} y1={5} x2={0} y2={3} stroke={color} strokeWidth={sw} strokeLinecap="round"/>
-      {/* Right temple arm */}
-      <line x1={30} y1={5} x2={32} y2={3} stroke={color} strokeWidth={sw} strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,panX,panY}){
-  var R=10,color=circleColor(chat);
-  var x=cx+chat.r*Math.cos((chat.angle*Math.PI)/180),y=cy+chat.r*Math.sin((chat.angle*Math.PI)/180);
-  var hasLens=radius!==null&&radius!==undefined;
-  var screenX=x+panX,screenY=y+panY;
-  var distFromCenter=Math.sqrt((screenX-cx)*(screenX-cx)+(screenY-cy)*(screenY-cy));
-  var inLens=!hasLens||distFromCenter<=radius;
-  var baseOp=hasLens?(inLens?1:0.12):1;
-  var transition="opacity 0.25s ease, filter 0.25s ease";
-  var prevInLens=useRef(inLens);
-  var [ringVisible,setRingVisible]=useState(inLens);
-  useEffect(()=>{
-    if(!prevInLens.current&&inLens){
-      // Slight delay so circle appears first, then ring fades in
-      var t=setTimeout(()=>setRingVisible(true),160);
-      return()=>clearTimeout(t);
-    }
-    if(prevInLens.current&&!inLens){setRingVisible(false);}
-    prevInLens.current=inLens;
-  },[inLens]);
-
-  if(chat.type==="hidden"){
-    if(!revealProgress||revealProgress<=0)return null;
-    var rp=revealProgress,sh=0.4+0.6*Math.sin(rp*Math.PI),hatch=[];
-    for(var i=-R;i<=R;i+=3.5){var hw=Math.sqrt(Math.max(0,R*R-i*i));hatch.push(<line key={i} x1={x-hw} y1={y+i} x2={x+hw} y2={y+i} stroke={color} strokeWidth="0.7" opacity={0.45*rp}/>);}
-    return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:rp,transition}}>
-      <circle cx={x} cy={y} r={22} fill="transparent"/>
-      <circle cx={x} cy={y} r={R+8*sh} fill="none" stroke={color} strokeWidth="1" opacity={sh*.5*(1-rp*.5)}/>
-      <clipPath id={"hclip"+chat.id}><circle cx={x} cy={y} r={R}/></clipPath>
-      <g clipPath={"url(#hclip"+chat.id+")"}>{hatch}</g>
-      <circle cx={x} cy={y} r={R} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={chat.pulseable!==false?"3 2.5":"none"}/>
-      <text x={x} y={y+4} textAnchor="middle" fontSize="10" fontWeight="900" fill={color} fontFamily={font}>?</text>
-    </g>);
-  }
-
-  return(<g onClick={()=>onClick(chat)} style={{cursor:"pointer",opacity:baseOp,transition}}>
-    <circle cx={x} cy={y} r={22} fill="transparent"/>
-    {/* Lens ring — static when settled, pops on enter */}
-    {hasLens&&inLens&&<circle cx={x} cy={y} r={R+6} fill="none" stroke={color} strokeWidth="2.5"
-      opacity={ringVisible?0.35:0}
-      style={{transition:"opacity 0.25s ease"}}
-    />}
-    {highlighted&&<circle cx={x} cy={y} r={R+10} fill="none" stroke={color} strokeWidth="1.5" opacity={0.6} strokeDasharray="3 3"/>}
-    {highlighted&&<circle cx={x} cy={y} r={R+18} fill="none" stroke={color} strokeWidth="0.8" opacity={0.25} strokeDasharray="2 4"/>}
-    {chat.type==="open"&&<circle cx={x} cy={y} r={R} fill={color}/>}
-    {chat.type==="closed"&&<circle cx={x} cy={y} r={R} fill={BG} stroke={color} strokeWidth="2"/>}
-    <text x={x} y={y-R-6} textAnchor="middle" fontSize="8" fontWeight="700" fill={INK} fontFamily={font} letterSpacing="0.8" opacity={inLens||!hasLens?1:0.15}>{chat.name.toUpperCase()}</text>
-  </g>);
-}
-
-function JoinModal({chat,onClose,onJoined,onRequestSent}){
-  var [track,setTrack]=useState(null),[input,setInput]=useState(""),[status,setStatus]=useState(null);
-  var color=circleColor(chat);
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none",width:"100%"};
-  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%",fontSize:16,padding:"6px 0"};
-  function tryPassphrase(){if(!input.trim())return;if(input.trim().toLowerCase()===(chat.passphrase||"").toLowerCase()){setStatus("success");setTimeout(()=>onJoined(chat),900);}else{setStatus("error");setTimeout(()=>setStatus(null),1400);}}
-  function submitRequest(){if(!input.trim())return;onRequestSent(chat.id,{id:Math.random().toString(36).slice(2),senderId:"user_local",senderHandle:"@you",message:input.trim(),timestamp:Date.now(),status:"pending"});setStatus("pending");}
-  function tryInvite(){if(input.trim().length===6){setStatus("success");setTimeout(()=>onJoined(chat),900);}else{setStatus("error");setTimeout(()=>setStatus(null),1400);}}
-  return(<Portal><div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center",background:"rgba(10,10,10,0.45)"}}><div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:390,padding:"28px 24px 36px",boxShadow:"0 -4px 0 "+INK}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}><div><div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:4}}>Hidden Circle</div><div style={{fontSize:20,fontWeight:900,letterSpacing:1,textTransform:"uppercase",color:INK}}>{chat.name||"???"}</div></div><button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>×</button></div>
-    {!track&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{fontSize:11,color:INK_MID,marginBottom:8,lineHeight:1.7}}>You've discovered something. How do you want to get in?</div>{[{key:"passphrase",label:"I know the passphrase",icon:"◈"},{key:"request",label:"Request access",icon:"◎"},{key:"invite",label:"I have an invite code",icon:"◉"}].map(opt=>(<div key={opt.key} onClick={()=>{setTrack(opt.key);setInput("");setStatus(null);}} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",border:"2px solid "+INK_LIGHT,cursor:"pointer"}}><span style={{fontSize:16,color}}>{opt.icon}</span><span style={{fontWeight:700,fontSize:12,color:INK,letterSpacing:.5}}>{opt.label}</span></div>))}</div>)}
-    {track==="passphrase"&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:18}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Enter the passphrase</div><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryPassphrase();}} placeholder="speak the words..." style={{...ii,fontStyle:"italic"}} autoFocus/>{status==="error"&&<div style={{fontSize:10,color:"#7a3a3a",fontWeight:700,letterSpacing:1}}>Wrong passphrase. Try again.</div>}<div style={{display:"flex",gap:10}}><button onClick={()=>setTrack(null)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={tryPassphrase} style={{...bb,flex:2,background:INK,color:BG}}>Enter →</button></div></div>)}
-    {track==="request"&&status!=="pending"&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:18}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Make your case</div><textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="Why should they let you in?" rows={4} style={{...ii,resize:"none",lineHeight:1.6,fontSize:16,borderBottom:"none",border:"1.5px solid "+INK_LIGHT,padding:"10px 12px"}} autoFocus/><div style={{display:"flex",gap:10}}><button onClick={()=>setTrack(null)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={submitRequest} style={{...bb,flex:2,background:INK,color:BG}}>Send Request</button></div></div>)}
-    {track==="request"&&status==="pending"&&(<div style={{display:"flex",flexDirection:"column",gap:14,alignItems:"center",padding:"12px 0"}}><div style={{fontSize:24,opacity:.3}}>◎</div><div style={{fontSize:11,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,textAlign:"center"}}>Request Sent</div><div style={{fontSize:11,color:INK_MID,textAlign:"center",lineHeight:1.8,maxWidth:240}}>{chat.governance?.mode==="democracy"?"The circle will vote on your request.":"An admin will review your request."}</div><button onClick={onClose} style={{...bb,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID,marginTop:8}}>Close</button></div>)}
-    {track==="invite"&&status!=="success"&&(<div style={{display:"flex",flexDirection:"column",gap:18}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Invite code</div><input value={input} onChange={e=>setInput(e.target.value.toUpperCase().slice(0,6))} onKeyDown={e=>{if(e.key==="Enter")tryInvite();}} placeholder="XXXXXX" style={{...ii,letterSpacing:6,fontSize:22,fontWeight:900}} autoFocus/>{status==="error"&&<div style={{fontSize:10,color:"#7a3a3a",fontWeight:700,letterSpacing:1}}>Invalid code.</div>}<div style={{display:"flex",gap:10}}><button onClick={()=>setTrack(null)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={tryInvite} style={{...bb,flex:2,background:input.length===6?INK:"none",color:input.length===6?BG:INK_LIGHT,border:"2px solid "+(input.length===6?INK:INK_LIGHT)}}>Verify →</button></div></div>)}
-    {status==="success"&&(<div style={{display:"flex",flexDirection:"column",gap:14,alignItems:"center",padding:"12px 0"}}><div style={{fontSize:28}}>◉</div><div style={{fontSize:11,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK,textAlign:"center"}}>You're in</div><div style={{fontSize:11,color:INK_MID,textAlign:"center"}}>Welcome to the circle.</div></div>)}
-  </div></div></Portal>);
-}
-
-function PulseParticles({progress,tx,ty,fired,particles}){if(!particles||progress<=0)return null;var BTN_R=64;return <g>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=fired?Math.pow(lp,.55):1-Math.pow(1-lp,.7);var dist=fired?e*BTN_R*4.2:p.dist*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var px=tx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,py=ty+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var op=fired?Math.pow(1-e,.8)*.8:(.2+e*.8);var sz=fired?p.size*(1-e*.6):p.size*(.3+e*.7);return <circle key={i} cx={px} cy={py} r={Math.max(.1,sz)} fill={INK} opacity={op} style={{pointerEvents:"none"}}/>;})}</g>;}
-function OutwardBurst({progress,cx,cy,radius,particles}){if(!particles||!progress||progress<=0||!radius)return null;return <g style={{pointerEvents:"none"}}>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=Math.pow(lp,.5),maxD=radius*p.travelMult,dist=e*maxD;var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var x=cx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,y=cy+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var fade=dist>radius?Math.max(0,1-(dist-radius)/(maxD-radius)):1;return <circle key={i} cx={x} cy={y} r={Math.max(.1,p.size*(1-e*.55))} fill={INK} opacity={Math.pow(1-e,.6)*p.brightness*fade}/>;})}</g>;}
-function InwardRush({progress,cx,cy,radius,particles}){if(!particles||!progress||progress<=0||!radius)return null;return <g style={{pointerEvents:"none"}}>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=1-Math.pow(1-lp,.7),spawnD=radius*p.spawnMult,dist=spawnD*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var x=cx+Math.cos(p.angle)*dist+Math.cos(pa)*lat,y=cy+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var fadeIn=Math.min(1,e*3),fadeOut=dist<20?dist/20:1;return <circle key={i} cx={x} cy={y} r={Math.max(.1,p.size*(.4+e*.6))} fill={INK} opacity={fadeIn*fadeOut*p.brightness*.75}/>;})}</g>;}
-function PlantParticles({progress,px,py,stamp,particles}){if(!particles||progress<=0||!px)return null;return <g>{particles.map((p,i)=>{var lp=Math.max(0,Math.min(1,(progress-p.delay)/(1-p.delay)));if(lp<=0)return null;var e=stamp?Math.pow(lp,.5):1-Math.pow(1-lp,.75);var dist=stamp?e*20:p.scatter*(1-e);var lat=p.drift*Math.sin(e*Math.PI*p.driftFreq),pa=p.angle+Math.PI/2;var x=px+Math.cos(p.angle)*dist+Math.cos(pa)*lat,y=py+Math.sin(p.angle)*dist+Math.sin(pa)*lat;var op=stamp?Math.pow(1-e,.7)*.85:(.15+e*.85);return <circle key={i} cx={x} cy={y} r={Math.max(.1,p.size*(stamp?1-e*.8:.3+e*.7))} fill={INK} opacity={op} style={{pointerEvents:"none"}}/>;})}</g>;}
-function BleedRings({progress,cx,cy,btnR}){return <g>{[0,.18,.36].map((off,i)=>{var p=Math.max(0,Math.min(1,(progress-off)/.72));if(p<=0)return null;return <circle key={i} cx={cx} cy={cy} r={btnR+p*btnR*3.5} fill="none" stroke={INK} strokeWidth={(1-p)*2.5} opacity={(1-p)*.18} style={{pointerEvents:"none"}}/>;})}</g>;}
-function PulseRipples({cx,cy,maxR,progress}){return <g>{[0,.25,.5].map((off,i)=>{var p=Math.max(0,Math.min(1,(progress-off)/.6));if(p<=0)return null;return <circle key={i} cx={cx} cy={cy} r={p*maxR} fill="none" stroke={INK} strokeWidth={1.5-p} opacity={(1-p)*.6} strokeDasharray="6 4"/>;})}</g>;}
-
-function FloatingTag({tag,confirming,onRemove}){
-  var [offset,setOffset]=useState({x:0,y:0}),[opacity,setOpacity]=useState(0),[scale,setScale]=useState(.5);
-  var rafRef=useRef(null),startTime=useRef(Date.now()),phase=useRef(Math.random()*Math.PI*2);
-  useEffect(()=>{setOpacity(0);setScale(.5);var t0=Date.now();function animate(){var ep=Math.min(1,(Date.now()-t0)/300),e=1-Math.pow(1-ep,3);setOpacity(e);setScale(.5+e*.5);if(ep<1){rafRef.current=requestAnimationFrame(animate);}else{function drift(){var t=(Date.now()-startTime.current)/1000;setOffset({x:Math.sin(t*.7+phase.current)*4,y:Math.cos(t*.5+phase.current*1.3)*3});rafRef.current=requestAnimationFrame(drift);}rafRef.current=requestAnimationFrame(drift);}}rafRef.current=requestAnimationFrame(animate);return()=>cancelAnimationFrame(rafRef.current);},[]);
-  var cs=confirming?Math.max(0,1-confirming*2):1;
-  return <div style={{transform:`translate(${offset.x}px,${offset.y}px) scale(${scale*cs})`,opacity:opacity*cs,display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+INK,padding:"5px 11px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",cursor:"pointer",color:INK,background:BG,boxShadow:"1px 1px 0 "+INK_LIGHT}} onClick={()=>onRemove(tag)}>{tag} <span style={{opacity:.4,fontSize:11}}>×</span></div>;
-}
-
-function OnboardingFlow({onComplete}){
-  var [step,setStep]=useState(1),[name,setName]=useState(""),[handle,setHandle]=useState(""),[tags,setTags]=useState([]),[tagInput,setTagInput]=useState(""),[status,setStatus]=useState(""),[pulseCheck,setPulseCheck]=useState(false),[avatarBurst,setAvatarBurst]=useState(false),[avatarGrand,setAvatarGrand]=useState(false);
-  var inputRef=useRef(null);
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none",width:"100%"};
-  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%"};
-  useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[step]);
-  var [avatarAnimStyle,setAvatarAnimStyle]=useState(0);
-  function addTag(t){var c=t.trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();if(!c||tags.includes(c)||tags.length>=9)return;var next=[...tags,c];setTags(next);setTagInput("");var isGrand=next.length===9;setAvatarGrand(isGrand);setAvatarAnimStyle(isGrand?0:Math.floor(Math.random()*4));setAvatarBurst(true);}
-  function removeTag(t){setTags(p=>p.filter(x=>x!==t));setAvatarGrand(false);setAvatarAnimStyle(Math.floor(Math.random()*4));setAvatarBurst(true);}
-  var canNext1=name.trim().length>=2&&handle.trim().length>=2,canNext2=tags.length>=5;
-  function finish(){var hh=handle.trim().startsWith("@")?handle.trim():"@"+handle.trim();onComplete({id:"user_local",displayName:name.trim(),handle:hh,tags,status:status.trim(),pulseCheck,notifications:true,statusPresets:[...DEFAULT_PRESETS]});}
-  return(<div style={{flex:1,display:"flex",flexDirection:"column",background:BG}}>
-    <div style={{padding:"32px 28px 0"}}><div style={{fontWeight:900,fontSize:28,letterSpacing:4,textTransform:"uppercase",color:INK,marginBottom:6}}>Circle</div><div style={{fontSize:10,color:INK_MID,letterSpacing:2,fontWeight:700,marginBottom:28}}>STEP {step} OF 3</div><div style={{height:2,background:INK_LIGHT,marginBottom:32,position:"relative"}}><div style={{position:"absolute",top:0,left:0,height:"100%",background:INK,width:((step/3)*100)+"%",transition:"width 0.4s"}}/></div></div>
-    {step===1&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"0 28px 32px",gap:28,overflowY:"auto"}}>
-      <div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Who are you?</div><div style={{fontSize:13,color:INK_MID,lineHeight:1.7}}>No photo required. Your identity here is your name, your handle, and what you care about.</div></div>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,padding:"20px 0"}}><UserAvatar tags={tags} size={140} color={INK} bg={BG} burst={avatarBurst} grand={avatarGrand} animStyle={avatarAnimStyle} onBurstEnd={()=>{setAvatarBurst(false);setAvatarGrand(false);}}/><div style={{fontSize:9,color:INK_LIGHT,letterSpacing:1.5,textTransform:"uppercase"}}>Your avatar — shaped by your interests</div></div>
-      <div style={{display:"flex",flexDirection:"column",gap:20}}>
-        <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Display name</div><input ref={inputRef} value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" maxLength={32} style={{...ii,fontSize:20,fontWeight:900,padding:"6px 0"}} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}}/></div>
-        <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Handle</div><input value={handle} onChange={e=>setHandle(e.target.value.replace(/\s/g,""))} placeholder="@yourhandle" maxLength={24} style={{...ii,fontSize:16,fontWeight:700,padding:"6px 0",color:INK_MID}} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}}/><div style={{fontSize:9,color:INK_LIGHT,marginTop:6}}>This is how others see you in circles.</div></div>
-      </div>
-      <button onClick={()=>{if(canNext1)setStep(2);}} style={{...bb,background:canNext1?INK:"none",color:canNext1?BG:INK_LIGHT,border:"2px solid "+(canNext1?INK:INK_LIGHT),marginTop:"auto"}}>Continue →</button>
-    </div>)}
-    {step===2&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"0 28px 32px",gap:20,overflowY:"auto"}}>
-      <div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>What are you into?</div><div style={{fontSize:13,color:INK_MID,lineHeight:1.7}}>Pick 5–9 interests. These shape your avatar, your pulse signal, and what circles find you.</div></div>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"12px 0"}}><UserAvatar tags={tags} size={120} color={INK} bg={BG} burst={avatarBurst} grand={avatarGrand} animStyle={avatarAnimStyle} onBurstEnd={()=>{setAvatarBurst(false);setAvatarGrand(false);}}/><div style={{fontSize:9,color:INK_LIGHT,letterSpacing:1,textTransform:"uppercase"}}>{tags.length} / 9 selected</div></div>
-      <div style={{minHeight:56,display:"flex",flexWrap:"wrap",gap:8,alignItems:"flex-start"}}>{tags.length===0&&<span style={{fontSize:10,color:INK_LIGHT,fontStyle:"italic"}}>Tap interests below to add them</span>}{tags.map(t=>(<div key={t} onClick={()=>removeTag(t)} style={{display:"inline-flex",alignItems:"center",gap:5,background:INK,color:BG,padding:"5px 10px",fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{t} <span style={{opacity:.5}}>×</span></div>))}</div>
-      {tags.length<9&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={step===2?inputRef:null} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="or type your own..." maxLength={24} style={{...ii,fontSize:16,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput)} style={{background:tagInput.trim()?INK:"none",color:tagInput.trim()?BG:INK_LIGHT,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}
-      <div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:10}}>Suggestions</div><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{ALL_INTEREST_TAGS.filter(s=>!tags.includes(s)).map(s=>(<div key={s} onClick={()=>{if(tags.length<9)addTag(s);}} style={{border:"1.5px solid "+INK_LIGHT,padding:"8px 12px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:tags.length<9?"pointer":"default",color:tags.length<9?INK_MID:INK_LIGHT,minHeight:36,display:"inline-flex",alignItems:"center"}}>{s}</div>))}</div></div>
-      <div style={{fontSize:9,color:INK_MID}}>{Math.max(0,5-tags.length)} more needed to continue</div>
-      <div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(1)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext2)setStep(3);}} style={{...bb,flex:2,background:canNext2?INK:"none",color:canNext2?BG:INK_LIGHT,border:"2px solid "+(canNext2?INK:INK_LIGHT)}}>Continue →</button></div>
-    </div>)}
-    {step===3&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"0 28px 32px",gap:24,overflowY:"auto"}}>
-      <div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Right now</div><div style={{fontSize:13,color:INK_MID,lineHeight:1.7}}>A short, optional signal. What are you open to?</div></div>
-      <div><input ref={step===3?inputRef:null} value={status} onChange={e=>setStatus(e.target.value.slice(0,50))} placeholder="open to chat, have a seat..." style={{...ii,fontSize:16,fontWeight:600,fontStyle:status?"normal":"italic",padding:"6px 0"}} onKeyDown={e=>{if(e.key==="Enter")finish();}}/><div style={{fontSize:9,color:INK_LIGHT,marginTop:6,textAlign:"right"}}>{status.length}/50</div></div>
-      <div style={{border:"2px solid "+INK,padding:"18px 16px",display:"flex",gap:16,alignItems:"flex-start"}}>
-        <div onClick={()=>setPulseCheck(p=>!p)} style={{width:36,height:20,borderRadius:10,background:pulseCheck?INK:INK_LIGHT,position:"relative",flexShrink:0,cursor:"pointer",transition:"background 0.15s",marginTop:2}}><div style={{position:"absolute",top:3,left:pulseCheck?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
-        <div><div style={{fontWeight:900,fontSize:13,color:INK,letterSpacing:.5,marginBottom:4}}>Pulse Check</div><div style={{fontSize:11,color:INK_MID,lineHeight:1.7}}>{pulseCheck?"Active. When you're near someone open to connection, both of you will feel it.":"Off. Enable to be discovered by people and circles nearby in real time."}</div></div>
-      </div>
-      <div style={{background:BG_OUTER,padding:"14px 16px",fontSize:10,color:INK_MID,lineHeight:1.8}}><span style={{fontWeight:700,color:INK}}>Pulse Check</span> uses approximate location only. You control when it's on.</div>
-      <div style={{display:"flex",alignItems:"center",gap:16,padding:"12px 0",borderTop:"1px solid "+INK_LIGHT}}><UserAvatar tags={tags} size={80} color={INK} bg={BG}/><div><div style={{fontWeight:900,fontSize:16,color:INK,letterSpacing:1}}>{name||"You"}</div><div style={{fontSize:10,color:INK_MID,marginTop:2}}>{handle.startsWith("@")?handle:"@"+handle}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,fontStyle:"italic"}}>{status||"no status set"}</div></div></div>
-      <div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(2)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={finish} style={{...bb,flex:2,background:INK,color:BG}}>Enter Circle →</button></div>
-    </div>)}
-  </div>);
-}
-
-function CreateFlow({onComplete,onCancel}){
-  var [step,setStep]=useState(1),[name,setName]=useState(""),[ctype,setCtype]=useState(null),[pulseable,setPulseable]=useState(true),[tags,setTags]=useState([]),[tagInput,setTagInput]=useState(""),[govMode,setGovMode]=useState("admin"),[adminsInput,setAdminsInput]=useState(""),[passphrase,setPassphrase]=useState(""),[confirming,setConfirming]=useState(0),[circColor,setCircColor]=useState(CIRCLE_PALETTE[0]);
-  var inputRef=useRef(null),confirmRaf=useRef(null);
-  useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[step]);
-  function addTag(t){var c=t.trim().toLowerCase().replace(/[^a-z0-9]/g,"");if(!c||tags.includes(c)||tags.length>=6)return;setTags(p=>[...p,c]);setTagInput("");}
-  function removeTag(t){setTags(p=>p.filter(x=>x!==t));}
-  function handleCreate(){if(!canCreate)return;var start=Date.now();function anim(){var p=Math.min(1,(Date.now()-start)/500);setConfirming(p);if(p<1){confirmRaf.current=requestAnimationFrame(anim);}else{onComplete({name:name.trim(),type:ctype,pulseable,tags,passphrase:passphrase.trim(),governance:{mode:govMode,admins:adminsInput.split(",").map(s=>s.trim()).filter(Boolean)},color:circColor});}}confirmRaf.current=requestAnimationFrame(anim);}
-  var canNext1=name.trim().length>=2,canNext2=ctype!==null,canNext3=tags.length>=3,canCreate=canNext3;
-  useEffect(()=>{if(step===99)handleCreate();},[step]); // eslint-disable-line react-hooks/exhaustive-deps
-  var totalSteps=ctype==="hidden"?6:5;
-  var typeOptions=[{key:"open",label:"Open",desc:"Anyone nearby can join"},{key:"closed",label:"Closed",desc:"Invite only"},{key:"hidden",label:"Hidden",desc:"Discovered via Pulse"}];
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",padding:"12px 0",border:"none"};
-  var ii={background:"none",border:"none",borderBottom:"2px solid "+INK,outline:"none",fontFamily:font,color:INK,width:"100%"};
-  return(<div style={{flex:1,display:"flex",flexDirection:"column"}}>
-    <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:52}}><button onClick={onCancel} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,minWidth:44,minHeight:44,display:"flex",alignItems:"center",padding:0}}>←</button><span style={{fontWeight:900,fontSize:11,letterSpacing:2,textTransform:"uppercase",color:INK}}>New Circle</span><span style={{fontSize:10,fontWeight:700,color:INK_MID,letterSpacing:1,minWidth:44,textAlign:"right"}}>{step} / {totalSteps}</span></div>
-    {step===1&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:32}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Name your circle</div><input ref={inputRef} value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&canNext1)setStep(2);}} placeholder="WHAT IS IT CALLED" maxLength={32} style={{...ii,fontSize:22,fontWeight:900,letterSpacing:1,padding:"8px 0",textTransform:"uppercase"}}/><button onClick={()=>{if(canNext1)setStep(2);}} style={{...bb,background:canNext1?INK:"none",color:canNext1?BG:INK_LIGHT,border:"2px solid "+(canNext1?INK:INK_LIGHT)}}>Continue →</button></div>)}
-    {step===2&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:14}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:4}}>What kind of circle?</div>{typeOptions.map(opt=>{var sel=ctype===opt.key;return(<div key={opt.key}><div onClick={()=>{setCtype(opt.key);if(opt.key!=="hidden")setPulseable(true);}} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",border:"2px solid "+(sel?INK:INK_LIGHT),cursor:"pointer",background:sel?INK:BG}}><svg width="22" height="22" viewBox="0 0 22 22">{opt.key==="open"&&<circle cx="11" cy="11" r="9" fill={sel?BG:INK}/>}{opt.key==="closed"&&<circle cx="11" cy="11" r="8" fill="none" stroke={sel?BG:INK} strokeWidth="2"/>}{opt.key==="hidden"&&<g>{[-3,-1,1,3].map(ii2=>{var hw=Math.sqrt(Math.max(0,81-ii2*ii2*4));return <line key={ii2} x1={11-hw} y1={11+ii2*1.8} x2={11+hw} y2={11+ii2*1.8} stroke={sel?BG:INK} strokeWidth="0.8" opacity="0.5"/>;})}<circle cx="11" cy="11" r="8" fill="none" stroke={sel?BG:INK} strokeWidth="1.5" strokeDasharray="3 2"/></g>}</svg><div><div style={{fontWeight:900,fontSize:13,color:sel?BG:INK,letterSpacing:.5}}>{opt.label}</div><div style={{fontSize:10,color:sel?INK_LIGHT:INK_MID,marginTop:2}}>{opt.desc}</div></div></div>{opt.key==="hidden"&&sel&&(<div onClick={()=>setPulseable(p=>!p)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderLeft:"2px solid "+INK,borderRight:"2px solid "+INK,borderBottom:"2px solid "+INK,cursor:"pointer",background:BG}}><div style={{width:32,height:18,borderRadius:9,background:pulseable?INK:INK_LIGHT,position:"relative",flexShrink:0,transition:"background 0.15s"}}><div style={{position:"absolute",top:3,left:pulseable?16:3,width:12,height:12,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div><div><div style={{fontSize:11,fontWeight:700,color:INK,letterSpacing:.5}}>Discoverable via Pulse</div><div style={{fontSize:9,color:INK_MID,marginTop:1}}>{pulseable?"Others can sense this circle nearby":"Invite only — completely off the map"}</div></div></div>)}</div>);})} <div style={{display:"flex",gap:10,marginTop:8}}><button onClick={()=>setStep(1)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext2)setStep(3);}} style={{...bb,flex:2,background:canNext2?INK:"none",color:canNext2?BG:INK_LIGHT,border:"2px solid "+(canNext2?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
-    {step===3&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:20}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Tag it</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Min 3, max 6.</div></div><div style={{minHeight:80,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center",padding:"12px 0"}}>{tags.map(t=><FloatingTag key={t} tag={t} confirming={confirming} onRemove={removeTag}/>)}{tags.length===0&&<span style={{fontSize:10,color:INK_LIGHT,fontStyle:"italic"}}>Tags will float here</span>}</div>{tags.length<6&&(<div style={{display:"flex",gap:8,alignItems:"center"}}><input ref={inputRef} value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{...ii,fontSize:16,padding:"6px 0",flex:1}}/><button onClick={()=>addTag(tagInput)} style={{background:INK,color:BG,border:"none",padding:"8px 14px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1,minHeight:44}}>+</button></div>)}<div><div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Suggestions</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{TAG_SUGGESTIONS.filter(s=>!tags.includes(s.replace(/[^a-z0-9]/g,""))).slice(0,8).map(s=><div key={s} onClick={()=>addTag(s)} style={{border:"1px dashed "+INK_LIGHT,padding:"8px 12px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",color:INK_MID,minHeight:36,display:"inline-flex",alignItems:"center"}}>{s}</div>)}</div></div><div style={{fontSize:9,color:INK_MID}}>{tags.length}/6 · {Math.max(0,3-tags.length)} more needed</div><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(2)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>{if(canNext3)setStep(4);}} style={{...bb,flex:2,background:canNext3?INK:"none",color:canNext3?BG:INK_LIGHT,border:"2px solid "+(canNext3?INK:INK_LIGHT)}}>Continue →</button></div></div>)}
-    {step===4&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Governance</div><div style={{display:"flex",border:"2px solid "+INK}}>{[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"12px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><FistIcon size={18} color={sel?BG:INK}/> Democracy</span>:<span style={{display:"inline-flex",alignItems:"center",gap:6}}><SpectaclesIcon size={14} color={sel?BG:INK}/> Admin Rule</span>}</button>);})}</div><div style={{fontSize:10,color:INK_MID,lineHeight:1.7}}>{govMode==="admin"?"Admins approve requests.":"Members vote. Majority rules."}</div><input value={adminsInput} onChange={e=>setAdminsInput(e.target.value)} placeholder="@handle, @handle..." style={{...ii,fontSize:16,padding:"6px 0"}}/><div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(3)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(5)} style={{...bb,flex:2,background:INK,color:BG}}>Continue →</button></div></div>)}
-    {step===5&&(<div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 28px",gap:22}}>
-      <div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Choose a color</div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:10,padding:"8px 0"}}>{CIRCLE_PALETTE.map(col=>(<div key={col} onClick={()=>setCircColor(col)} style={{width:32,height:32,background:col,cursor:"pointer",border:circColor===col?"3px solid "+INK:"3px solid transparent",borderRadius:2,transition:"border 0.1s",boxSizing:"border-box"}}/>))}</div>
-      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderTop:"1px solid "+INK_LIGHT}}>
-        <div style={{width:18,height:18,borderRadius:"50%",background:ctype==="open"?circColor:"none",border:"2px solid "+circColor,flexShrink:0}}/>
-        <span style={{fontSize:11,color:INK,fontWeight:700,letterSpacing:.5}}>{name||"Your circle"}</span>
-      </div>
-      <div style={{display:"flex",gap:10,marginTop:"auto"}}><button onClick={()=>setStep(4)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={()=>setStep(ctype==="hidden"?6:99)} style={{...bb,flex:2,background:INK,color:BG}}>{ctype==="hidden"?"Continue →":"Plant Circle"}</button></div>
-    </div>)}
-    {step===6&&ctype==="hidden"&&(<div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",gap:28}}><div><div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Set the passphrase</div><div style={{fontSize:10,color:INK_MID,marginTop:6,lineHeight:1.7}}>Optional. A secret phrase to enter.</div></div><input ref={inputRef} value={passphrase} onChange={e=>setPassphrase(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")handleCreate();}} placeholder="velvet fog..." maxLength={48} style={{...ii,fontSize:18,fontWeight:700,fontStyle:"italic",padding:"8px 0"}}/><div style={{display:"flex",gap:10}}><button onClick={()=>setStep(5)} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>← Back</button><button onClick={handleCreate} style={{...bb,flex:2,background:INK,color:BG}}>Plant Circle</button></div></div>)}
-  </div>);
-}
-
-function RadiusEdgeLabel({cx,cy,radius,radiusMiles,visibleCount,onReset}){
-  if(!radius)return null;
-  // Label sits just inside the bottom of the ring
-  var labelY=cy+radius-18;
-  // Reset icon sits just inside the top of the ring
-  var resetY=cy-radius+22;
-  var resetX=cx;
-  return(<g style={{pointerEvents:"none"}}>
-    {/* Radius label — bottom inside */}
-    <text x={cx} y={labelY} textAnchor="middle" fontSize="8" fontWeight="700"
-      fill={INK} fontFamily={font} letterSpacing="1.5" opacity="0.75"
-      style={{pointerEvents:"none"}}>
-      {radiusMiles+" MI · "+visibleCount+" VISIBLE"}
-    </text>
-    {/* Reset button — top inside, pointer events on */}
-    <g style={{pointerEvents:"all",cursor:"pointer"}} onClick={onReset}>
-      <circle cx={resetX} cy={resetY} r={10} fill={BG} stroke={INK_LIGHT} strokeWidth="1"/>
-      {/* Circular arrow symbol */}
-      <path d={`M${resetX-4},${resetY} a4,4 0 1,1 5,5`} fill="none" stroke={INK} strokeWidth="1.4" strokeLinecap="round"/>
-      <path d={`M${resetX+1},${resetY+5} l2,1 l-1,-2.5`} fill={INK} stroke="none"/>
-    </g>
-  </g>);
-}
-
-function BottomNav({tab,setTab,currentUser}){
-  var tabs=["map","circles","pulse","profile"];
-  var [animatingTab,setAnimatingTab]=useState(tab);
-  var [labelOpacity,setLabelOpacity]=useState(1);
-  var rafRef=useRef(null);
-  useEffect(()=>{
-    setLabelOpacity(0);
-    var timer=setTimeout(()=>{setAnimatingTab(tab);var start=performance.now();function fadeIn(){var p=Math.min(1,(performance.now()-start)/180);setLabelOpacity(p);if(p<1)rafRef.current=requestAnimationFrame(fadeIn);}rafRef.current=requestAnimationFrame(fadeIn);},90);
-    return()=>{clearTimeout(timer);cancelAnimationFrame(rafRef.current);};
-  },[tab]);
-  function getIcon(name,active){
-    var c=active?BG:INK_MID;
-    if(name==="map")return(
-      <svg width={36} height={36} viewBox="0 0 36 36">
-        <line x1={18} y1={2} x2={18} y2={12} stroke={c} strokeWidth={2} strokeLinecap="round"/>
-        <line x1={18} y1={24} x2={18} y2={34} stroke={c} strokeWidth={2} strokeLinecap="round"/>
-        <line x1={2} y1={18} x2={12} y2={18} stroke={c} strokeWidth={2} strokeLinecap="round"/>
-        <line x1={24} y1={18} x2={34} y2={18} stroke={c} strokeWidth={2} strokeLinecap="round"/>
-        <circle cx={18} cy={18} r={3} fill={c}/>
-      </svg>
-    );
-    if(name==="circles")return(
-      <svg width={36} height={36} viewBox="0 0 36 36">
-        <circle cx={18} cy={18} r={14} fill="none" stroke={c} strokeWidth={3}/>
-      </svg>
-    );
-    if(name==="pulse")return(
-      <svg width={36} height={36} viewBox="0 0 36 36">
-        <circle cx={18} cy={18} r={3} fill={c}/>
-        <circle cx={18} cy={18} r={9} fill="none" stroke={c} strokeWidth={1.8} strokeDasharray="3 3"/>
-        <circle cx={18} cy={18} r={15} fill="none" stroke={c} strokeWidth={1.2} strokeDasharray="2 4"/>
-      </svg>
-    );
-    if(name==="profile")return <StaticAvatar tags={currentUser?.tags||[]} size={38} color={c} bg={active?INK:BG}/>;
-    return null;
-  }
-  return(<div style={{borderTop:"2px solid "+INK,display:"flex",paddingBottom:"env(safe-area-inset-bottom)",background:BG}}>
-    {tabs.map((name,i)=>{
-      var active=tab===name;
-      return(<button key={name} onClick={()=>setTab(name)} style={{flex:1,minHeight:76,background:active?INK:BG,border:"none",borderRight:i<3?"1px solid "+(active?INK:INK_LIGHT):"none",fontFamily:font,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background 0.18s"}}>
-        {active?(<span style={{fontSize:9,fontWeight:900,letterSpacing:2.5,textTransform:"uppercase",color:BG,opacity:animatingTab===name?labelOpacity:0,transition:"opacity 0.09s",userSelect:"none"}}>{name}</span>):(getIcon(name,false))}
-      </button>);
-    })}
-  </div>);
-}
-
-// ── NOTE HELPERS ──────────────────────────────────────────────────────────────
-function makeNote({text,tags,visibility,placedPos,ownerId}){
-  var now=Date.now();
-  return{
-    id:Math.random().toString(36).slice(2),
-    text,tags,visibility,
-    ownerId:ownerId||"user_local",
-    createdAt:now,
-    expiresAt:now+NOTE_EXPIRE_DAYS*24*60*60*1000,
-    placed:!!placedPos,
-    placedPos:placedPos||null,
-  };
-}
-function noteDaysLeft(note){
-  return Math.max(0,Math.ceil((note.expiresAt-Date.now())/(24*60*60*1000)));
-}
-function noteOpacity(note){
-  var daysLeft=noteDaysLeft(note);
-  if(daysLeft>NOTE_FADE_DAYS)return 1;
-  return 0.3+0.7*(daysLeft/NOTE_FADE_DAYS);
-}
-
-// ── ENVELOPE MAP ICON ─────────────────────────────────────────────────────────
-function EnvelopeMarker({note,x,y,onClick,radius,panX=0,panY=0,stamping=false,revealed=false,isOwn=false}){
-  var baseOp=noteOpacity(note);
-  var W=26,H=18;
-  var hasLens=radius!==null&&radius!==undefined;
-  var screenX=x+panX,screenY=y+panY;
-  var CX=175,CY=210;
-  var distFromCenter=Math.sqrt((screenX-CX)*(screenX-CX)+(screenY-CY)*(screenY-CY));
-  var inLens=!hasLens||distFromCenter<=radius;
-  var op=hasLens?(inLens?baseOp:baseOp*0.12):baseOp;
-  var prevInLens=useRef(inLens);
-  var [wiggling,setWiggling]=useState(false);
-  useEffect(()=>{
-    if(!prevInLens.current&&inLens){setWiggling(true);setTimeout(()=>setWiggling(false),400);}
-    prevInLens.current=inLens;
-  },[inLens]);
-
-  var isHidden=note.visibility==="hidden";
-  var isClosed=note.visibility==="closed";
-  var sw=0.8;
-  var animStyle={animation:wiggling?"envelopeWiggle 0.4s ease":stamping?"noteStamp 0.6s cubic-bezier(0.22,1,0.36,1)":"none",transformOrigin:"0px 0px"};
-
-  // Own hidden note — ghost envelope, always visible to owner
-  if(isHidden&&!revealed&&isOwn){
-    return(
-      <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:0.35}}>
-        <g style={animStyle}>
-          <rect x={-W/2} y={-H/2} width={W} height={H} fill="none" stroke={INK} strokeWidth={sw} strokeDasharray="3 2" rx="1"/>
-          <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={INK} strokeWidth={sw}/>
-          <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
-          <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
-          {/* Ghost label */}
-          <text x={0} y={H/2+8} textAnchor="middle" fontSize="5" fill={INK} fontFamily={font} letterSpacing="1" opacity="0.6">HIDDEN</text>
-        </g>
-      </g>
-    );
-  }
-
-  // Hidden not-yet-revealed (and not own) — crumpled paper
-  if(isHidden&&!revealed){
-    return(
-      <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:0.7}}>
-        <g style={animStyle}>
-          <polygon points="-9,7 -5,10 2,9 9,6 10,-2 7,-9 0,-8 -8,-6 -10,0 -7,5" fill={NOTE_BG} stroke={INK} strokeWidth={sw} strokeDasharray="2 2" opacity="0.6"/>
-          <line x1={-4} y1={-3} x2={4} y2={-1} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.5"/>
-          <line x1={-5} y1={1} x2={3} y2={3} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.5"/>
-        </g>
-      </g>
-    );
-  }
-
-  return(
-    <g transform={`translate(${x},${y})`} onClick={()=>onClick(note)} style={{cursor:"pointer",opacity:op,transition:"opacity 0.25s ease"}}>
-      <g style={animStyle}>
-        {/* Envelope body */}
-        <rect x={-W/2} y={-H/2} width={W} height={H} fill={NOTE_BG} stroke={INK} strokeWidth={sw} rx="1"
-          strokeDasharray={isHidden?"3 2":"none"}
-          opacity={isHidden?0.75:1}
-        />
-        {/* Flap */}
-        {!isClosed&&!isHidden&&(
-          <polyline points={`${-W/2},${-H/2} 0,${H*0.02} ${W/2},${-H/2}`} fill="none" stroke={INK} strokeWidth={sw}/>
-        )}
-        {(isClosed||isHidden)&&(
-          <line x1={-W/2} y1={-H/2} x2={W/2} y2={-H/2} stroke={INK} strokeWidth={sw}/>
-        )}
-        {/* Bottom creases */}
-        <line x1={-W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
-        <line x1={W/2} y1={H/2} x2={0} y2={H*0.02} stroke={INK} strokeWidth={sw*0.7}/>
-        {/* Wax seal — uniform size, distinct per type */}
-        {(()=>{
-          var sy=isClosed||isHidden?H*0.12:0;
-          if(isHidden){
-            // Hidden: filled circle + inner ring (original)
-            return(<g><circle cx={0} cy={sy} r={3.2} fill={INK} opacity="0.85"/><circle cx={0} cy={sy} r={1.8} fill="none" stroke={NOTE_BG} strokeWidth="0.7"/></g>);
-          } else if(isClosed){
-            // Closed: filled circle + cross stamp
-            return(<g><circle cx={0} cy={sy} r={3.2} fill={INK} opacity="0.85"/><line x1={-1.4} y1={sy-1.4} x2={1.4} y2={sy+1.4} stroke={NOTE_BG} strokeWidth="0.8"/><line x1={1.4} y1={sy-1.4} x2={-1.4} y2={sy+1.4} stroke={NOTE_BG} strokeWidth="0.8"/></g>);
-          } else {
-            // Open: hollow ring only — already opened
-            return(<g><circle cx={0} cy={sy} r={3.2} fill="none" stroke={INK} strokeWidth="0.9" opacity="0.7"/><circle cx={0} cy={sy} r={1.6} fill="none" stroke={INK} strokeWidth="0.5" opacity="0.4"/></g>);
-          }
-        })()}
-        {/* Hidden dashed ring */}
-        {isHidden&&(
-          <ellipse cx={0} cy={0} rx={W/2+3} ry={H/2+3} fill="none" stroke={INK} strokeWidth="0.5" strokeDasharray="2 3" opacity="0.4"/>
-        )}
-      </g>
-    </g>
-  );
-}
-
-// ── NOTE PAPER ────────────────────────────────────────────────────────────────
-function NotePaper({note,onClose,compact=false,smoothed=false}){
-  var daysLeft=noteDaysLeft(note);
-  var fading=daysLeft<=NOTE_FADE_DAYS;
-  var lines=[];
-  // Ruled lines on paper
-  var lineCount=compact?5:8;
-  for(var i=0;i<lineCount;i++)lines.push(i);
-
-  return(
-    <div style={{
-      background:NOTE_BG,
-      border:"1.5px solid "+INK,
-      boxShadow:"3px 3px 0 "+INK,
-      padding:compact?"14px 16px":"24px 22px",
-      position:"relative",
-      fontFamily:font,
-      width:"100%",
-      boxSizing:"border-box",
-    }}>
-      {/* Ruled lines */}
-      {lines.map(i=>(
-        <div key={i} style={{
-          position:"absolute",left:compact?16:22,right:compact?16:22,
-          top:(compact?40:52)+i*(compact?22:26),
-          height:1,background:INK_LIGHT,opacity:0.35,
-        }}/>
-      ))}
-      {/* Red margin line */}
-      <div style={{position:"absolute",left:compact?38:48,top:0,bottom:0,width:1,background:"#c9a0a0",opacity:0.4}}/>
-      {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:compact?10:16,position:"relative"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:7,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>
-            {note.visibility.toUpperCase()}
-          </span>
-          {note.tags.length>0&&<span style={{fontSize:7,color:INK_LIGHT,letterSpacing:1}}>
-            {note.tags.slice(0,3).join(" · ")}
-          </span>}
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {fading&&<span style={{fontSize:7,color:"#8a6a4a",fontWeight:700,letterSpacing:1}}>
-            {daysLeft}d left
-          </span>}
-          {onClose&&<button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:INK_MID,padding:0,lineHeight:1}}>×</button>}
-        </div>
-      </div>
-      {/* Note text */}
-      <div style={{
-        fontSize:compact?13:15,
-        lineHeight:compact?1.65:1.7,
-        color:INK,
-        fontStyle:"italic",
-        position:"relative",
-        minHeight:compact?44:80,
-        paddingLeft:compact?44:54,
-      }}>
-        {note.text||<span style={{color:INK_LIGHT}}>empty note</span>}
-      </div>
-      {/* Drawing stub — reserved for future */}
-      {!compact&&(
-        <div style={{
-          marginTop:16,paddingTop:12,
-          borderTop:"1px dashed "+INK_LIGHT,
-          display:"flex",alignItems:"center",justifyContent:"center",
-          minHeight:60,color:INK_LIGHT,fontSize:9,
-          fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",
-          position:"relative",
-        }}>
-          Drawing — coming soon
-        </div>
-      )}
-      {/* Residual crinkle marks — only for smoothed hidden notes */}
-      {smoothed&&(()=>{
-        var seed=note.id.charCodeAt(0)+(note.id.charCodeAt(1)||7);
-        var marks=[];
-        for(var i=0;i<6;i++){
-          var x1=((seed*17+i*31)%160)+20,y1=((seed*13+i*23)%180)+30;
-          var x2=x1+((seed*7+i*19)%30)-15,y2=y1+((seed*11+i*37)%30)-15;
-          marks.push(<div key={i} style={{position:"absolute",left:x1+"%",top:y1*0.4+"%",width:((seed*3+i*11)%40)+20,height:1,background:INK_LIGHT,opacity:0.18,transform:`rotate(${((seed+i*7)%30)-15}deg)`,transformOrigin:"left center"}}/>);
-        }
-        return marks;
-      })()}
-    </div>
-  );
-}
-
-// ── COMPOSE VIEW ──────────────────────────────────────────────────────────────
-function NoteCompose({onFinish,onCancel}){
-  var [text,setText]=useState("");
-  var [tags,setTags]=useState([]);
-  var [visibility,setVisibility]=useState("open");
-  var [tagInput,setTagInput]=useState("");
-  var inputRef=useRef(null);
-  var remaining=NOTE_MAX_CHARS-text.length;
-  var canFinish=text.trim().length>0;
-
-  function addTag(t){
-    var c=t.trim().toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
-    if(!c||tags.includes(c)||tags.length>=6)return;
-    setTags(p=>[...p,c]);setTagInput("");
-  }
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-      {/* Header */}
-      <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <button onClick={onCancel} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,padding:0}}>←</button>
-        <span style={{fontWeight:900,fontSize:11,letterSpacing:2,textTransform:"uppercase",color:INK}}>New Note</span>
-        <button onClick={()=>{if(canFinish)onFinish({text:text.trim(),tags,visibility});}} style={{background:canFinish?INK:"none",color:canFinish?NOTE_BG:INK_LIGHT,border:"1.5px solid "+(canFinish?INK:INK_LIGHT),fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:canFinish?"pointer":"default",padding:"6px 12px"}}>
-          Finish
-        </button>
-      </div>
-
-      <div style={{flex:1,overflowY:"auto",padding:"20px 18px",display:"flex",flexDirection:"column",gap:16}}>
-        {/* Paper */}
-        <div style={{background:NOTE_BG,border:"1.5px solid "+INK,boxShadow:"3px 3px 0 "+INK,padding:"20px 18px",position:"relative",boxSizing:"border-box"}}>
-          {/* Ruled lines */}
-          {[0,1,2,3,4,5].map(i=>(
-            <div key={i} style={{position:"absolute",left:18,right:18,top:44+i*26,height:1,background:INK_LIGHT,opacity:0.35}}/>
-          ))}
-          {/* Red margin */}
-          <div style={{position:"absolute",left:44,top:0,bottom:0,width:1,background:"#c9a0a0",opacity:0.4}}/>
-          {/* Char count */}
-          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10,position:"relative"}}>
-            <span style={{fontSize:8,color:remaining<20?"#8a3a3a":INK_LIGHT,fontWeight:700,letterSpacing:1}}>{remaining}</span>
-          </div>
-          <textarea
-            ref={inputRef}
-            value={text}
-            onChange={e=>{if(e.target.value.length<=NOTE_MAX_CHARS)setText(e.target.value);}}
-            placeholder="leave your mark..."
-            rows={5}
-            style={{
-              width:"100%",background:"none",border:"none",outline:"none",
-              fontFamily:font,fontSize:15,color:INK,lineHeight:1.7,
-              resize:"none",fontStyle:"italic",
-              paddingLeft:52,boxSizing:"border-box",
-              position:"relative",
-            }}
-            autoFocus
-          />
-          {/* Drawing stub */}
-          <div style={{marginTop:12,paddingTop:10,borderTop:"1px dashed "+INK_LIGHT,display:"flex",alignItems:"center",justifyContent:"center",minHeight:52,color:INK_LIGHT,fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase"}}>
-            Drawing — coming soon
-          </div>
-        </div>
-
-        {/* Visibility */}
-        <div>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Visibility</div>
-          <div style={{display:"flex",border:"1.5px solid "+INK}}>
-            {["open","closed","hidden"].map((v,i)=>{
-              var sel=visibility===v;
-              return(
-                <button key={v} onClick={()=>setVisibility(v)} style={{flex:1,padding:"10px 0",background:sel?INK:NOTE_BG,color:sel?NOTE_BG:INK,border:"none",borderRight:i<2?"1px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>
-                  {v}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Tags <span style={{fontWeight:400,color:INK_LIGHT}}>(optional, max 6)</span></div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-            {tags.map(t=>(
-              <div key={t} onClick={()=>setTags(p=>p.filter(x=>x!==t))} style={{border:"1.5px solid "+INK,padding:"5px 10px",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK,cursor:"pointer",background:NOTE_BG,display:"flex",alignItems:"center",gap:6}}>
-                {t} <span style={{color:INK_LIGHT,fontSize:11}}>×</span>
-              </div>
-            ))}
-          </div>
-          {tags.length<6&&(
-            <div style={{display:"flex",gap:8}}>
-              <input value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:14,color:INK,padding:"4px 0"}}/>
-              <button onClick={()=>addTag(tagInput)} style={{background:INK,color:NOTE_BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1}}>+</button>
-            </div>
-          )}
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:10}}>
-            {TAG_SUGGESTIONS.filter(s=>!tags.includes(s)).slice(0,10).map(s=>(
-              <div key={s} onClick={()=>addTag(s)} style={{border:"1px dashed "+INK_LIGHT,padding:"5px 10px",fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",color:INK_MID,background:NOTE_BG}}>{s}</div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── NOTES PANEL ───────────────────────────────────────────────────────────────
-function NotesPanel({notes,onClose,onCompose,onPlace,onReadNote}){
-  var unplaced=notes.filter(n=>!n.placed);
-  var canCompose=unplaced.length<NOTE_MAX_UNPLACED;
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-      <div style={{padding:"14px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontWeight:900,fontSize:11,letterSpacing:2,textTransform:"uppercase",color:INK}}>Notes</span>
-        <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:INK,padding:0}}>×</button>
-      </div>
-
-      <div style={{flex:1,overflowY:"auto",padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
-        {/* Compose button */}
-        <button onClick={()=>{if(canCompose)onCompose();}} style={{
-          width:"100%",background:canCompose?INK:INK_LIGHT,color:canCompose?NOTE_BG:BG,
-          border:"none",padding:"12px 0",fontFamily:font,fontWeight:700,
-          fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:canCompose?"pointer":"default",
-        }}>
-          {canCompose?`+ New Note`:`Full (${NOTE_MAX_UNPLACED}/${NOTE_MAX_UNPLACED})`}
-        </button>
-
-        {unplaced.length===0&&(
-          <div style={{textAlign:"center",padding:"32px 0",color:INK_LIGHT,fontSize:11,fontStyle:"italic"}}>
-            No unplaced notes yet.
-          </div>
-        )}
-
-        {unplaced.map(note=>(
-          <div key={note.id}>
-            <NotePaper note={note} compact={true}/>
-            <button onClick={()=>onPlace(note)} style={{
-              width:"100%",background:"none",border:"1.5px solid "+INK,borderTop:"none",
-              padding:"10px 0",fontFamily:font,fontWeight:700,fontSize:9,
-              letterSpacing:2,textTransform:"uppercase",cursor:"pointer",color:INK,
-            }}>
-              Place on Map →
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── READ NOTE MODAL ───────────────────────────────────────────────────────────
-function ReadNoteModal({note,onClose,smoothed=false}){
-  return(
-    <Portal>
-      <div style={{position:"fixed",inset:0,zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(10,10,10,0.5)",padding:"24px"}} onClick={onClose}>
-        <div style={{width:"100%",maxWidth:340}} onClick={e=>e.stopPropagation()}>
-          <NotePaper note={note} onClose={onClose} smoothed={smoothed}/>
-        </div>
-      </div>
-    </Portal>
-  );
-}
-
-// ── CRUMPLED NOTE REVEAL ──────────────────────────────────────────────────────
-function CrumpledNoteReveal({note,onSmoothed,onCancel}){
-  var [progress,setProgress]=useState(0);
-  var svgRef=useRef(null);
-  var drawing=useRef(false);
-  var totalPoints=useRef(0);
-  var THRESHOLD=0.55;
-
-  var seed=note.id.charCodeAt(0)+(note.id.charCodeAt(1)||7);
-  var crinkleLines=[];
-  for(var i=0;i<14;i++){
-    var x1=((seed*17+i*31)%170)+15,y1=((seed*13+i*23)%220)+15;
-    var x2=x1+((seed*7+i*19)%50)-25,y2=y1+((seed*11+i*37)%50)-25;
-    crinkleLines.push({x1,y1,x2:Math.max(8,Math.min(192,x2)),y2:Math.max(8,Math.min(252,y2)),op:0.3+((seed*i*3)%10)/30});
-  }
-
-  function onStart(e){e.preventDefault();drawing.current=true;}
-  function onMove(e){
-    if(!drawing.current)return;
-    e.preventDefault();
-    totalPoints.current+=1;
-    var np=Math.min(1,totalPoints.current/90);
-    setProgress(np);
-    if(np>=THRESHOLD)setTimeout(()=>onSmoothed(note),350);
-  }
-  function onEnd(){drawing.current=false;}
-
-  var distort=1-progress;
-  var blurAmt=(distort*6).toFixed(1);
-  var skewX=(distort*8-4).toFixed(1);
-  var skewY=(distort*3).toFixed(1);
-  var smoothed=progress>=THRESHOLD;
-
-  var words=(note.text||"").split(" ");
-  var lines=[];var cur="";
-  words.forEach(w=>{if((cur+" "+w).length>22&&cur){lines.push(cur);cur=w;}else cur=cur?cur+" "+w:w;});
-  if(cur)lines.push(cur);
-
-  return(
-    <Portal>
-      <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(10,10,10,0.65)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}} onClick={onCancel}>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:NOTE_BG,opacity:0.7,height:14}}>
-            {smoothed?"\u2713 smoothed":"smooth it out"}
-          </div>
-          <svg ref={svgRef} width={200} height={260} viewBox="0 0 200 260"
-            style={{touchAction:"none",cursor:"crosshair",filter:"drop-shadow(2px 3px 0 rgba(0,0,0,0.4))"}}
-            onMouseDown={onStart} onMouseMove={onMove} onMouseUp={onEnd}
-            onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
-            <defs>
-              <filter id="crinkleBlur">
-                <feGaussianBlur stdDeviation={blurAmt}/>
-              </filter>
-            </defs>
-            <rect x={0} y={0} width={200} height={260} fill={NOTE_BG} rx="2"/>
-            {[0,1,2,3,4,5].map(i=>(
-              <line key={i} x1={24} y1={62+i*26} x2={176} y2={62+i*26} stroke={INK_LIGHT} strokeWidth="0.5" opacity="0.35"/>
-            ))}
-            <line x1={42} y1={0} x2={42} y2={260} stroke="#c9a0a0" strokeWidth="0.5" opacity="0.3"/>
-            <g filter={distort>0.05?"url(#crinkleBlur)":undefined}
-               transform={"skewX("+skewX+") skewY("+skewY+")"}
-               style={{transformOrigin:"100px 130px"}}>
-              {lines.map((line,i)=>(
-                <text key={i} x={52} y={76+i*26} fontFamily="serif" fontSize="13" fill={INK} fontStyle="italic" opacity={0.5+progress*0.5}>{line}</text>
-              ))}
-            </g>
-            {crinkleLines.map((l,i)=>(
-              <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke={INK_LIGHT} strokeWidth="0.9" opacity={l.op*(1-progress*0.75)}/>
-            ))}
-            <rect x={0} y={0} width={200*progress} height={2} fill={INK} opacity="0.15" rx="1"/>
-          </svg>
-          <button onClick={onCancel} style={{background:"none",border:"1px solid "+NOTE_BG,color:NOTE_BG,fontFamily:font,fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",padding:"8px 20px",cursor:"pointer",opacity:0.5}}>cancel</button>
-        </div>
-      </div>
-    </Portal>
-  );
-}
-
-function UnfoldModal({note}){
-  return(
-    <Portal>
-      <div style={{position:"fixed",inset:0,zIndex:350,display:"flex",alignItems:"center",justifyContent:"center",padding:24,pointerEvents:"none"}}>
-        <div style={{width:"100%",maxWidth:340,animation:"noteUnfold 0.35s cubic-bezier(0.22,1,0.36,1)",transformOrigin:"center bottom"}}>
-          <NotePaper note={note}/>
-        </div>
-      </div>
-    </Portal>
-  );
-}
-
-function EditCircleModal({circle,onSave,onClose}){
-  var openedAt=useRef(Date.now());
-  var [name,setName]=useState(circle.name);
-  var [ctype,setCtype]=useState(circle.type);
-  var [color,setColor]=useState(circleColor(circle));
-  var [tags,setTags]=useState(circle.tags||[]);
-  var [tagInput,setTagInput]=useState("");
-  var [govMode,setGovMode]=useState(circle.governance?.mode||"admin");
-  var [passphrase,setPassphrase]=useState(circle.passphrase||"");
-  var [pulseable,setPulseable]=useState(circle.pulseable!==false);
-
-  function addTag(t){var c=t.trim().toLowerCase().replace(/[^a-z0-9]/g,"");if(!c||tags.includes(c)||tags.length>=6)return;setTags(p=>[...p,c]);setTagInput("");}
-  function removeTag(t){setTags(p=>p.filter(x=>x!==t));}
-
-  function save(){
-    var nameChanged=name.trim()!==circle.name;
-    var tagsChanged=JSON.stringify([...tags].sort())!==JSON.stringify([...circle.tags].sort());
-    onSave({
-      ...circle,
-      name:name.trim()||circle.name,
-      type:ctype,
-      color,
-      tags,
-      governance:{...circle.governance,mode:govMode},
-      passphrase:passphrase.trim(),
-      pulseable,
-    },nameChanged,tagsChanged);
-    onClose();
-  }
-
-  var bb={fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"11px 0",border:"none"};
-  var ii={background:"none",border:"none",borderBottom:"1.5px solid "+INK_LIGHT,outline:"none",fontFamily:font,color:INK,width:"100%"};
-
-  return(
-    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(10,10,10,0.55)",display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={()=>{if(Date.now()-openedAt.current>350)onClose();}}>
-        <div style={{background:BG,border:"2px solid "+INK,borderBottom:"none",width:"100%",maxWidth:430,margin:"0 auto",padding:"24px 22px 36px",boxShadow:"0 -4px 0 "+INK,maxHeight:"80vh",overflowY:"auto",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:18}}>Edit Circle</div>
-
-          {/* Name */}
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Name</div>
-            <input value={name} onChange={e=>setName(e.target.value)} maxLength={48} style={{...ii,fontSize:15,fontWeight:900,letterSpacing:.5,padding:"4px 0"}}/>
-          </div>
-
-          {/* Type */}
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Type</div>
-            <div style={{display:"flex",border:"2px solid "+INK}}>
-              {["open","closed","hidden"].map((t,i)=>{var sel=ctype===t;return(<button key={t} onClick={()=>setCtype(t)} style={{flex:1,padding:"10px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i<2?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{t}</button>);})}
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Tags <span style={{opacity:.5,fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:9}}>(tap to remove)</span></div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-              {tags.map(t=>(<span key={t} onClick={()=>removeTag(t)} style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",border:"1.5px solid "+INK,padding:"3px 8px",color:INK,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>{t} <span style={{opacity:.4}}>×</span></span>))}
-            </div>
-            {tags.length<6&&<div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <input value={tagInput} onChange={e=>setTagInput(e.target.value.toLowerCase())} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();addTag(tagInput);}}} placeholder="add a tag..." maxLength={24} style={{...ii,fontSize:13,padding:"4px 0",flex:1}}/>
-              <button onClick={()=>addTag(tagInput)} style={{background:INK,color:BG,border:"none",padding:"6px 12px",fontFamily:font,fontWeight:700,fontSize:9,cursor:"pointer",letterSpacing:1}}>+</button>
-            </div>}
-          </div>
-
-          {/* Color */}
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Color</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              {CIRCLE_PALETTE.map(col=>(<div key={col} onClick={()=>setColor(col)} style={{width:28,height:28,background:col,cursor:"pointer",border:color===col?"3px solid "+INK:"3px solid transparent",borderRadius:2,boxSizing:"border-box"}}/>))}
-            </div>
-          </div>
-
-          {/* Governance */}
-          <div style={{marginBottom:ctype==="hidden"?18:24}}>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Governance</div>
-            <div style={{display:"flex",border:"2px solid "+INK}}>
-              {[{key:"admin",label:"Admin Rule"},{key:"democracy",label:"Democracy"}].map((opt,i)=>{var sel=govMode===opt.key;return(<button key={opt.key} onClick={()=>setGovMode(opt.key)} style={{flex:1,padding:"10px 0",background:sel?INK:BG,color:sel?BG:INK,border:"none",borderRight:i===0?"2px solid "+INK:"none",fontFamily:font,fontWeight:700,fontSize:9,letterSpacing:1,textTransform:"uppercase",cursor:"pointer"}}>{opt.key==="democracy"?<span style={{display:"inline-flex",alignItems:"center",gap:5}}><FistIcon size={13} color={sel?BG:INK}/> Democracy</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><SpectaclesIcon size={11} color={sel?BG:INK}/> Admin Rule</span>}</button>);})}
-            </div>
-          </div>
-
-          {/* Passphrase — hidden only */}
-          {ctype==="hidden"&&<div style={{marginBottom:24}}>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:6}}>Passphrase <span style={{opacity:.5,fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:9}}>(optional)</span></div>
-            <input value={passphrase} onChange={e=>setPassphrase(e.target.value)} placeholder="velvet fog..." maxLength={48} style={{...ii,fontSize:14,fontStyle:"italic",padding:"4px 0"}}/>
-          </div>}
-
-          {/* Discoverable — hidden only */}
-          {ctype==="hidden"&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:"1px solid "+INK_LIGHT,marginBottom:20}}>
-            <div style={{flex:1}}><div style={{fontSize:11,fontWeight:700,color:INK,letterSpacing:.5}}>Discoverable via Pulse</div><div style={{fontSize:9,color:INK_MID,marginTop:1}}>{pulseable?"Others can sense this circle":"Invite only"}</div></div>
-            <div onClick={()=>setPulseable(p=>!p)} style={{width:36,height:20,borderRadius:10,background:pulseable?INK:INK_LIGHT,position:"relative",cursor:"pointer",transition:"background 0.15s",flexShrink:0}}><div style={{position:"absolute",top:3,left:pulseable?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
-          </div>}
-
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={onClose} style={{...bb,flex:1,background:"none",border:"2px solid "+INK_LIGHT,color:INK_MID}}>Cancel</button>
-            <button onClick={save} style={{...bb,flex:2,background:INK,color:BG}}>Save Changes</button>
-          </div>
-        </div>
-      </div>
-  );
-}
-
-function ProfileTagInput({onAdd}){
-  var [val,setVal]=useState("");
-  function submit(){var c=val.trim().toLowerCase().replace(/[^a-z0-9]/g,"");if(c){onAdd(c);setVal("");}}
-  return(
-    <span style={{display:"inline-flex",alignItems:"center",gap:2}}>
-      <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();submit();}}} placeholder="+ add tag" maxLength={20} style={{background:"none",border:"none",borderBottom:"1px dashed "+INK_LIGHT,outline:"none",fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:INK_MID,width:68,padding:"3px 4px"}}/>
-    </span>
-  );
-}
-
-export default function App(){
-  useEffect(()=>{
-    var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}";
+import { BG, BG_OUTER, INK, INK_LIGHT, INK_MID, NOTE_BG } from "./constants/theme.js";
+import { font } from "./constants/theme.js";
+import { MAP_CX, MAP_CY, MAP_MIN_R, MAP_MAX_R, MAP_BTN_R, MAP_STAGE_R, HOLD_MS, PLANT_MS, NOTE_EXPIRE_DAYS, NOTE_FADE_DAYS } from "./constants/settings.js";
+import { NEARBY_USERS, PULSE_CIRCLES, INIT_CHATS, DEFAULT_PRESETS } from "./constants/data.js";
+import { makeCircle, makeMessage } from "./utils/circles.js";
+import { makeNote } from "./utils/notes.js";
+import { genPulseParticles, genOutwardParticles, genInwardParticles, genPlantParticles, genCoalesceParticles } from "./utils/particles.js";
+
+import { OnboardingFlow } from "./components/onboarding/OnboardingFlow.jsx";
+import { BottomNav } from "./components/nav/BottomNav.jsx";
+import { JoinModal } from "./components/circles/JoinModal.jsx";
+import { CreateFlow } from "./components/circles/CreateFlow.jsx";
+import { EditCircleModal } from "./components/circles/EditCircleModal.jsx";
+import { PulseCheckCard } from "./components/pulse/PulseCheckCard.jsx";
+import { CirclePulseCard } from "./components/pulse/CirclePulseCard.jsx";
+import { PulseChat } from "./components/pulse/PulseChat.jsx";
+import { SpontaneousCircleSheet } from "./components/pulse/SpontaneousCircleSheet.jsx";
+import { InterestMatchNotif } from "./components/pulse/InterestMatchNotif.jsx";
+import { ReadNoteModal } from "./components/notes/ReadNoteModal.jsx";
+import { CrumpledNoteReveal } from "./components/notes/CrumpledNoteReveal.jsx";
+import { UnfoldModal } from "./components/notes/UnfoldModal.jsx";
+
+import { MapView } from "./views/MapView.jsx";
+import { CirclesView } from "./views/CirclesView.jsx";
+import { PulseView } from "./views/PulseView.jsx";
+import { ProfileView } from "./views/ProfileView.jsx";
+import { ChatView } from "./views/ChatView.jsx";
+
+const CX = MAP_CX, CY = MAP_CY, MIN_R = MAP_MIN_R, MAX_R = MAP_MAX_R;
+const BTN_R = MAP_BTN_R, STAGE_R = MAP_STAGE_R;
+const NEARBY_DUR = 4200;
+
+export default function App() {
+  // ── Global styles (iOS tap, scroll lock, animations) ──────────────────────
+  useEffect(() => {
+    var s = document.createElement("style");
+    s.textContent = "*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}";
     document.head.appendChild(s);
-    return()=>s.remove();
-  },[]);
+    return () => s.remove();
+  }, []);
 
-  // iOS keyboard handling is managed via position:fixed on html/body in global styles
-  var [currentUser,setCurrentUser]=useState(null);
-  var [tab,setTab]=useState("map");
-  var [notes,setNotes]=useState([]);
-  var [revealedNoteIds,setRevealedNoteIds]=useState(new Set());
-  var [smoothedNoteIds,setSmoothedNoteIds]=useState(new Set());
-  var [crumpledNote,setCrumpledNote]=useState(null); // note being smoothed out
-  var [stampingNoteId,setStampingNoteId]=useState(null); // note playing stamp anim
-  var [unfoldingNote,setUnfoldingNote]=useState(null); // note playing unfold before read
-  var [hiddenNoteNotif,setHiddenNoteNotif]=useState(null); // notification for discovered hidden note
-  var hiddenNoteNotifTimer=useRef(null);
-  var [notesPanelOpen,setNotesPanelOpen]=useState(false);
-  var [notesView,setNotesView]=useState("list"); // "list" | "compose"
-  var [placingNote,setPlacingNote]=useState(null); // note waiting to be placed
-  var placingNoteRef=useRef(null);
-  function setPlacingNoteSync(v){placingNoteRef.current=v;setPlacingNote(v);}
-  var [readingNote,setReadingNote]=useState(null);
-  var [radius,setRadius]=useState(null);
-  var [drawPhase,setDrawPhase]=useState("idle");
-  var drawPhaseRef=useRef("idle");
-  function setDrawPhaseSync(v){drawPhaseRef.current=v;setDrawPhase(v);}
-  var [drawPath,setDrawPath]=useState([]);
-  var [_liveRadius,setLiveRadius]=useState(0); // eslint-disable-line no-unused-vars
-  var [circleScale,setCircleScale]=useState(1);
-  var [selectedChat,setSelectedChat]=useState(null);
-  var [joinTarget,setJoinTarget]=useState(null);
-  var [msgInput,setMsgInput]=useState("");
-  var [allChats,setAllChats]=useState(INIT_CHATS);
-  var [joinedIds,setJoinedIds]=useState(new Set());
-  var [revealedIds,setRevealedIds]=useState(new Set());
-  var [revealProgress,setRevealProgress]=useState({});
-  var [breathe,setBreathe]=useState(1);
-  var [holdProgress,setHoldProgress]=useState(0);
-  var [pulseState,setPulseState]=useState("idle");
-  var [rippleProgress,setRippleProgress]=useState(0);
-  var [returnProgress,setReturnProgress]=useState(0);
-  var [touchPt,setTouchPt]=useState({x:64,y:64});
-  var [plantHold,setPlantHold]=useState(0);
-  var [plantPos,setPlantPos]=useState(null);
-  var [plantStamp,setPlantStamp]=useState(0);
-  var [creating,setCreating]=useState(false);
-  var [editingCircle,setEditingCircle]=useState(null);
-  var [pendingPos,setPendingPos]=useState(null);
-  var [pulseFired,setPulseFired]=useState(false);
-  var [pulseParticles,setPulseParticles]=useState(()=>genPulseParticles(90));
-  var [outwardParticles,setOutwardParticles]=useState(()=>genOutwardParticles(69));
-  var [inwardParticles,setInwardParticles]=useState(()=>genInwardParticles(56));
-  var [plantParticles,setPlantParticles]=useState(()=>genPlantParticles(85));
+  // ── User ──────────────────────────────────────────────────────────────────
+  var [currentUser, setCurrentUser] = useState(null);
+  var [tab, setTab] = useState("map");
 
-  var [nearbyUser,setNearbyUser]=useState(null);
-  var [nearbyUserProgress,setNearbyUserProgress]=useState(0);
-  var [nearbyUserCoalesce,setNearbyUserCoalesce]=useState(null);
-  var [showPersonCard,setShowPersonCard]=useState(false);
-  var [pulseChatUser,setPulseChatUser]=useState(null);
-  var [spontaneousTarget,setSpontaneousTarget]=useState(null);
+  // ── Circles ───────────────────────────────────────────────────────────────
+  var [allChats, setAllChats] = useState(INIT_CHATS);
+  var [joinedIds, setJoinedIds] = useState(new Set());
+  var [revealedIds, setRevealedIds] = useState(new Set());
+  var [revealProgress, setRevealProgress] = useState({});
+  var [joinTarget, setJoinTarget] = useState(null);
+  var [selectedChat, setSelectedChat] = useState(null);
+  var [editingCircle, setEditingCircle] = useState(null);
+  var [creating, setCreating] = useState(false);
+  var [pendingPos, setPendingPos] = useState(null);
+  var [msgInput, setMsgInput] = useState("");
+  var [highlightedCircleId, setHighlightedCircleId] = useState(null);
+  var revealRafs = useRef({});
 
-  var [nearbyCircle,setNearbyCircle]=useState(null);
-  var [nearbyCircleProgress,setNearbyCircleProgress]=useState(0);
-  var [nearbyCircleCoalesce,setNearbyCircleCoalesce]=useState(null);
-  var [showCircleCard,setShowCircleCard]=useState(false);
+  // ── Notes ─────────────────────────────────────────────────────────────────
+  var [notes, setNotes] = useState([]);
+  var [revealedNoteIds, setRevealedNoteIds] = useState(new Set());
+  var [smoothedNoteIds, setSmoothedNoteIds] = useState(new Set());
+  var [crumpledNote, setCrumpledNote] = useState(null);
+  var [stampingNoteId, setStampingNoteId] = useState(null);
+  var [unfoldingNote, setUnfoldingNote] = useState(null);
+  var [readingNote, setReadingNote] = useState(null);
+  var [hiddenNoteNotif, setHiddenNoteNotif] = useState(null);
+  var [notesPanelOpen, setNotesPanelOpen] = useState(false);
+  var [notesView, setNotesView] = useState("list");
+  var [placingNote, setPlacingNote] = useState(null);
+  var placingNoteRef = useRef(null);
+  var placeNoteRef = useRef(null);
+  var hiddenNoteNotifTimer = useRef(null);
+  function setPlacingNoteSync(v) { placingNoteRef.current = v; setPlacingNote(v); }
 
-  var [mapDimProgress,setMapDimProgress]=useState(0);
-  var [interestMatchCircle,setInterestMatchCircle]=useState(null);
-  var [interestMatchTags,setInterestMatchTags]=useState([]);
-  var [highlightedCircleId,setHighlightedCircleId]=useState(null);
-  var [bumpActive,setBumpActive]=useState(false);
-  var [bumpPulse,setBumpPulse]=useState(1);
-  var [panX,setPanX]=useState(0);
-  var [panY,setPanY]=useState(0);
+  // ── Map geometry ──────────────────────────────────────────────────────────
+  var [radius, setRadius] = useState(null);
+  var [drawPhase, setDrawPhase] = useState("idle");
+  var drawPhaseRef = useRef("idle");
+  function setDrawPhaseSync(v) { drawPhaseRef.current = v; setDrawPhase(v); }
+  var [drawPath, setDrawPath] = useState([]);
+  var [circleScale, setCircleScale] = useState(1);
+  var [breathe, setBreathe] = useState(1);
+  var [panX, setPanX] = useState(0);
+  var [panY, setPanY] = useState(0);
+  var svgRef = useRef(null);
+  var svgRectCache = useRef(null);
+  var dragging = useRef(false);
+  var isPanning = useRef(false);
+  var panOrigin = useRef(null);
+  var panMoveTotal = useRef(0);
+  var breatheRaf = useRef(null);
 
-  var bumpRaf=useRef(null),bumpT=useRef(0);
-  var nearbyPersonRaf=useRef(null),nearbyPersonStart=useRef(null);
-  var nearbyCircleRaf=useRef(null),nearbyCircleStart=useRef(null);
-  var NEARBY_DUR=4200;
-  var svgRef=useRef(null),dragging=useRef(false);
-  var svgRectCache=useRef(null);
-  var isPanning=useRef(false),panOrigin=useRef(null),panMoveTotal=useRef(0);
-  var plantHoldActive=useRef(false),plantHoldStart=useRef(null);
-  var plantHoldProgressRef=useRef(0),plantStampProgressRef=useRef(0),plantPosRef=useRef(null);
-  var pulseHoldStart=useRef(null),pulseHoldRaf=useRef(null);
-  var rippleRaf=useRef(null),coolingTimer=useRef(null);
-  var plantRaf=useRef(null),stampRaf=useRef(null),breatheRaf=useRef(null);
-  var revealRafs=useRef({});
-  var bumpTimer=useRef(null),interestTimer=useRef(null);
-  const CX=175,CY=210,MIN_R=70,MAX_R=250,BTN_R=64,STAGE_R=130;
+  // ── Plant hold ────────────────────────────────────────────────────────────
+  var [plantHold, setPlantHold] = useState(0);
+  var [plantPos, setPlantPos] = useState(null);
+  var [plantStamp, setPlantStamp] = useState(0);
+  var [plantParticles, setPlantParticles] = useState(() => genPlantParticles(85));
+  var plantHoldActive = useRef(false);
+  var plantHoldStart = useRef(null);
+  var plantHoldProgressRef = useRef(0);
+  var plantStampProgressRef = useRef(0);
+  var plantPosRef = useRef(null);
+  var plantRaf = useRef(null);
+  var stampRaf = useRef(null);
 
-  useEffect(()=>{plantPosRef.current=plantPos;},[plantPos]);
-  useEffect(()=>{plantStampProgressRef.current=plantStamp;},[plantStamp]);
-  useEffect(()=>{plantHoldProgressRef.current=plantHold;},[plantHold]);
-  useEffect(()=>{
-    if(tab!=="map"){cancelAnimationFrame(breatheRaf.current);return;}
-    var t=0;function loop(){t+=.025;setBreathe(1+.15*Math.sin(t));breatheRaf.current=requestAnimationFrame(loop);}breatheRaf.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(breatheRaf.current);
-  },[tab]);
-  useEffect(()=>{if(!bumpActive){cancelAnimationFrame(bumpRaf.current);setBumpPulse(1);return;}function loop(){bumpT.current+=0.04;setBumpPulse(1+0.3*Math.sin(bumpT.current));bumpRaf.current=requestAnimationFrame(loop);}bumpRaf.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(bumpRaf.current);},[bumpActive]);
+  // ── Pulse ─────────────────────────────────────────────────────────────────
+  var [pulseState, setPulseState] = useState("idle");
+  var [holdProgress, setHoldProgress] = useState(0);
+  var [rippleProgress, setRippleProgress] = useState(0);
+  var [returnProgress, setReturnProgress] = useState(0);
+  var [touchPt, setTouchPt] = useState({ x: 64, y: 64 });
+  var [pulseFired, setPulseFired] = useState(false);
+  var [pulseParticles, setPulseParticles] = useState(() => genPulseParticles(90));
+  var [outwardParticles, setOutwardParticles] = useState(() => genOutwardParticles(69));
+  var [inwardParticles, setInwardParticles] = useState(() => genInwardParticles(56));
+  var pulseHoldStart = useRef(null);
+  var pulseHoldRaf = useRef(null);
+  var rippleRaf = useRef(null);
+  var coolingTimer = useRef(null);
 
-  var pulseCheckKey=useRef(0);
-  useEffect(()=>{
-    setBumpActive(false);setInterestMatchCircle(null);clearTimeout(bumpTimer.current);clearTimeout(interestTimer.current);
-    cancelAnimationFrame(nearbyPersonRaf.current);cancelAnimationFrame(nearbyCircleRaf.current);
-    setNearbyUser(null);setNearbyUserProgress(0);setNearbyUserCoalesce(null);setShowPersonCard(false);
-    setNearbyCircle(null);setNearbyCircleProgress(0);setNearbyCircleCoalesce(null);setShowCircleCard(false);
+  // ── Nearby / Pulse Check ──────────────────────────────────────────────────
+  var [nearbyUser, setNearbyUser] = useState(null);
+  var [nearbyUserProgress, setNearbyUserProgress] = useState(0);
+  var [nearbyUserCoalesce, setNearbyUserCoalesce] = useState(null);
+  var [showPersonCard, setShowPersonCard] = useState(false);
+  var [pulseChatUser, setPulseChatUser] = useState(null);
+  var [spontaneousTarget, setSpontaneousTarget] = useState(null);
+  var [nearbyCircle, setNearbyCircle] = useState(null);
+  var [nearbyCircleProgress, setNearbyCircleProgress] = useState(0);
+  var [nearbyCircleCoalesce, setNearbyCircleCoalesce] = useState(null);
+  var [showCircleCard, setShowCircleCard] = useState(false);
+  var [mapDimProgress, setMapDimProgress] = useState(0);
+  var [bumpActive, setBumpActive] = useState(false);
+  var [bumpPulse, setBumpPulse] = useState(1);
+  var [interestMatchCircle, setInterestMatchCircle] = useState(null);
+  var [interestMatchTags, setInterestMatchTags] = useState([]);
+  var nearbyPersonRaf = useRef(null);
+  var nearbyPersonStart = useRef(null);
+  var nearbyCircleRaf = useRef(null);
+  var nearbyCircleStart = useRef(null);
+  var bumpRaf = useRef(null);
+  var bumpT = useRef(0);
+  var bumpTimer = useRef(null);
+  var interestTimer = useRef(null);
+  var pulseCheckKey = useRef(0);
+
+  // ── Breathe loop ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (tab !== "map") { cancelAnimationFrame(breatheRaf.current); return; }
+    var t = 0;
+    function loop() { t += 0.025; setBreathe(1 + 0.15 * Math.sin(t)); breatheRaf.current = requestAnimationFrame(loop); }
+    breatheRaf.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(breatheRaf.current);
+  }, [tab]);
+
+  // ── Bump pulse animation ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!bumpActive) { cancelAnimationFrame(bumpRaf.current); setBumpPulse(1); return; }
+    function loop() { bumpT.current += 0.04; setBumpPulse(1 + 0.3 * Math.sin(bumpT.current)); bumpRaf.current = requestAnimationFrame(loop); }
+    bumpRaf.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(bumpRaf.current);
+  }, [bumpActive]);
+
+  // ── Pulse Check side effects ───────────────────────────────────────────────
+  useEffect(() => {
+    setBumpActive(false); setInterestMatchCircle(null);
+    clearTimeout(bumpTimer.current); clearTimeout(interestTimer.current);
+    cancelAnimationFrame(nearbyPersonRaf.current); cancelAnimationFrame(nearbyCircleRaf.current);
+    setNearbyUser(null); setNearbyUserProgress(0); setNearbyUserCoalesce(null); setShowPersonCard(false);
+    setNearbyCircle(null); setNearbyCircleProgress(0); setNearbyCircleCoalesce(null); setShowCircleCard(false);
     setMapDimProgress(0);
-    if(!currentUser?.pulseCheck)return;
-    var key=++pulseCheckKey.current;
-    bumpTimer.current=setTimeout(()=>{if(pulseCheckKey.current!==key)return;setBumpActive(true);setTimeout(()=>setBumpActive(false),3000);},3000);
-    interestTimer.current=setTimeout(()=>{
-      if(pulseCheckKey.current!==key)return;
-      var userTags=currentUser.tags||[];
-      var best=INIT_CHATS.filter(c=>c.type!=="hidden"&&!joinedIds.has(c.id)).map(c=>({c,shared:c.tags.filter(t=>userTags.includes(t))})).filter(x=>x.shared.length>0).sort((a,b)=>b.shared.length-a.shared.length)[0];
-      if(best){setInterestMatchCircle(best.c);setInterestMatchTags(best.shared);setTimeout(()=>setInterestMatchCircle(null),3000);}
-    },6000);
-    return()=>{clearTimeout(bumpTimer.current);clearTimeout(interestTimer.current);};
-  },[currentUser?.pulseCheck]);
+    if (!currentUser?.pulseCheck) return;
+    var key = ++pulseCheckKey.current;
+    bumpTimer.current = setTimeout(() => {
+      if (pulseCheckKey.current !== key) return;
+      setBumpActive(true); setTimeout(() => setBumpActive(false), 3000);
+    }, 3000);
+    interestTimer.current = setTimeout(() => {
+      if (pulseCheckKey.current !== key) return;
+      var userTags = currentUser.tags || [];
+      var best = INIT_CHATS
+        .filter(c => c.type !== "hidden" && !joinedIds.has(c.id))
+        .map(c => ({ c, shared: c.tags.filter(t => userTags.includes(t)) }))
+        .filter(x => x.shared.length > 0)
+        .sort((a, b) => b.shared.length - a.shared.length)[0];
+      if (best) { setInterestMatchCircle(best.c); setInterestMatchTags(best.shared); setTimeout(() => setInterestMatchCircle(null), 3000); }
+    }, 6000);
+    return () => { clearTimeout(bumpTimer.current); clearTimeout(interestTimer.current); };
+  }, [currentUser?.pulseCheck]);
 
-  function revealHiddenCircle(id){
-    if(revealedIds.has(id))return;
-    setRevealedIds(prev=>new Set([...prev,id]));
-    var start=performance.now(),dur=1800;
-    function tick(){var p=Math.min(1,(performance.now()-start)/dur);setRevealProgress(prev=>({...prev,[id]:p}));if(p<1){revealRafs.current[id]=requestAnimationFrame(tick);}}
-    revealRafs.current[id]=requestAnimationFrame(tick);
+  // ── Hidden circle reveal animation ───────────────────────────────────────
+  function revealHiddenCircle(id) {
+    if (revealedIds.has(id)) return;
+    setRevealedIds(prev => new Set([...prev, id]));
+    var start = performance.now(), dur = 1800;
+    function tick() { var p = Math.min(1, (performance.now() - start) / dur); setRevealProgress(prev => ({ ...prev, [id]: p })); if (p < 1) revealRafs.current[id] = requestAnimationFrame(tick); }
+    revealRafs.current[id] = requestAnimationFrame(tick);
   }
 
-  function runCoalesceAnim(tx,ty,setProgress,setCoalesce,setCard,rafRef,startRef,onTick){
-    setProgress(0);setMapDimProgress(0);setCard(false);
-    setCoalesce(genCoalesceParticles(65,tx,ty));
-    startRef.current=performance.now();
-    function tick(){
-      var p=Math.min(1,(performance.now()-startRef.current)/NEARBY_DUR);
-      setProgress(p);if(onTick)onTick(p);
-      var dim=p<0.55?(p/0.55)*0.46:p<0.78?0.46:Math.max(0,0.46*(1-(p-0.78)/0.08));
+  // ── Coalesce animation runner ─────────────────────────────────────────────
+  function runCoalesceAnim(tx, ty, setProgress, setCoalesce, setCard, rafRef, startRef, onTick) {
+    setProgress(0); setMapDimProgress(0); setCard(false);
+    setCoalesce(genCoalesceParticles(65, tx, ty));
+    startRef.current = performance.now();
+    function tick() {
+      var p = Math.min(1, (performance.now() - startRef.current) / NEARBY_DUR);
+      setProgress(p); if (onTick) onTick(p);
+      var dim = p < 0.55 ? (p / 0.55) * 0.46 : p < 0.78 ? 0.46 : Math.max(0, 0.46 * (1 - (p - 0.78) / 0.08));
       setMapDimProgress(dim);
-      if(p<1){rafRef.current=requestAnimationFrame(tick);}else{setMapDimProgress(0);setCoalesce(null);setCard(true);}
+      if (p < 1) { rafRef.current = requestAnimationFrame(tick); } else { setMapDimProgress(0); setCoalesce(null); setCard(true); }
     }
-    rafRef.current=requestAnimationFrame(tick);
+    rafRef.current = requestAnimationFrame(tick);
     setTab("map");
   }
 
-  function simulatePersonPulse(){
-    if(nearbyUser||nearbyCircle)return;
-    setBumpActive(false);setInterestMatchCircle(null);
-    var userTags=currentUser?.tags||[];
-    var sorted=[...NEARBY_USERS].sort((a,b)=>b.tags.filter(t=>userTags.includes(t)).length-a.tags.filter(t=>userTags.includes(t)).length);
-    var picked=sorted[Math.floor(Math.random()*Math.min(2,sorted.length))];
-    var tx=CX+picked.r*Math.cos((picked.angle*Math.PI)/180),ty=CY+picked.r*Math.sin((picked.angle*Math.PI)/180);
+  // ── Simulation handlers ───────────────────────────────────────────────────
+  function simulatePersonPulse() {
+    if (nearbyUser || nearbyCircle) return;
+    setBumpActive(false); setInterestMatchCircle(null);
+    var userTags = currentUser?.tags || [];
+    var sorted = [...NEARBY_USERS].sort((a, b) => b.tags.filter(t => userTags.includes(t)).length - a.tags.filter(t => userTags.includes(t)).length);
+    var picked = sorted[Math.floor(Math.random() * Math.min(2, sorted.length))];
+    var tx = CX + picked.r * Math.cos((picked.angle * Math.PI) / 180), ty = CY + picked.r * Math.sin((picked.angle * Math.PI) / 180);
     setNearbyUser(picked);
-    runCoalesceAnim(tx,ty,setNearbyUserProgress,setNearbyUserCoalesce,setShowPersonCard,nearbyPersonRaf,nearbyPersonStart);
+    runCoalesceAnim(tx, ty, setNearbyUserProgress, setNearbyUserCoalesce, setShowPersonCard, nearbyPersonRaf, nearbyPersonStart);
   }
 
-  function simulateCirclePulse(){
-    if(nearbyUser||nearbyCircle)return;
-    setBumpActive(false);setInterestMatchCircle(null);
-    var existingIds=new Set(allChats.map(c=>c.id));
-    var userTags=currentUser?.tags||[];
-    var available=[...PULSE_CIRCLES].filter(c=>!existingIds.has(c.id)).sort((a,b)=>b.tags.filter(t=>userTags.includes(t)).length-a.tags.filter(t=>userTags.includes(t)).length);
-    if(!available.length)return;
-    var picked=available[0];
-    var nc=makeCircle({id:picked.id,ownerId:"user_unknown",name:picked.name,type:"hidden",pulseable:true,passphrase:picked.passphrase||"",dist:parseFloat(((picked.r/MAX_R)*2).toFixed(1)),members:picked.members,angle:picked.angle,r:picked.r,msgs:[],tags:picked.tags,governance:picked.governance,isOwn:false,discovered:true});
-    setAllChats(prev=>[...prev,nc]);
-    setRevealedIds(prev=>new Set([...prev,picked.id]));
-    setRevealProgress(prev=>({...prev,[picked.id]:0}));
-    var tx=CX+picked.r*Math.cos((picked.angle*Math.PI)/180),ty=CY+picked.r*Math.sin((picked.angle*Math.PI)/180);
+  function simulateCirclePulse() {
+    if (nearbyUser || nearbyCircle) return;
+    setBumpActive(false); setInterestMatchCircle(null);
+    var existingIds = new Set(allChats.map(c => c.id));
+    var userTags = currentUser?.tags || [];
+    var available = [...PULSE_CIRCLES].filter(c => !existingIds.has(c.id)).sort((a, b) => b.tags.filter(t => userTags.includes(t)).length - a.tags.filter(t => userTags.includes(t)).length);
+    if (!available.length) return;
+    var picked = available[0];
+    var nc = makeCircle({ id: picked.id, ownerId: "user_unknown", name: picked.name, type: "hidden", pulseable: true, passphrase: picked.passphrase || "", dist: parseFloat(((picked.r / MAX_R) * 2).toFixed(1)), members: picked.members, angle: picked.angle, r: picked.r, tags: picked.tags, governance: picked.governance, isOwn: false, discovered: true });
+    setAllChats(prev => [...prev, nc]);
+    setRevealedIds(prev => new Set([...prev, picked.id]));
+    setRevealProgress(prev => ({ ...prev, [picked.id]: 0 }));
+    var tx = CX + picked.r * Math.cos((picked.angle * Math.PI) / 180), ty = CY + picked.r * Math.sin((picked.angle * Math.PI) / 180);
     setNearbyCircle(nc);
-    runCoalesceAnim(tx,ty,setNearbyCircleProgress,setNearbyCircleCoalesce,setShowCircleCard,nearbyCircleRaf,nearbyCircleStart,(p)=>setRevealProgress(prev=>({...prev,[picked.id]:p})));
+    runCoalesceAnim(tx, ty, setNearbyCircleProgress, setNearbyCircleCoalesce, setShowCircleCard, nearbyCircleRaf, nearbyCircleStart, (p) => setRevealProgress(prev => ({ ...prev, [picked.id]: p })));
   }
 
-  function dismissPerson(){setShowPersonCard(false);setNearbyUser(null);setNearbyUserProgress(0);setNearbyUserCoalesce(null);setMapDimProgress(0);cancelAnimationFrame(nearbyPersonRaf.current);}
-  function dismissCircle(){setShowCircleCard(false);setNearbyCircle(null);setNearbyCircleProgress(0);setNearbyCircleCoalesce(null);setMapDimProgress(0);cancelAnimationFrame(nearbyCircleRaf.current);}
-  function openPulseChat(user){setShowPersonCard(false);setPulseChatUser(user);}
-  function closePulseChat(){setPulseChatUser(null);setNearbyUser(null);}
-  function handleConnect(){setPulseChatUser(null);setNearbyUser(null);}
-  function openSpontaneousSheet(user,sharedTags){
-    // Blur any focused input first so keyboard starts dismissing
-    if(document.activeElement) document.activeElement.blur();
-    // Wait for iOS keyboard dismiss animation before swapping components
-    setTimeout(()=>{setPulseChatUser(null);setSpontaneousTarget({user,sharedTags});},500);
+  // ── Nearby person/circle dismiss & open ───────────────────────────────────
+  function dismissPerson() { setShowPersonCard(false); setNearbyUser(null); setNearbyUserProgress(0); setNearbyUserCoalesce(null); setMapDimProgress(0); cancelAnimationFrame(nearbyPersonRaf.current); }
+  function dismissCircle() { setShowCircleCard(false); setNearbyCircle(null); setNearbyCircleProgress(0); setNearbyCircleCoalesce(null); setMapDimProgress(0); cancelAnimationFrame(nearbyCircleRaf.current); }
+  function openPulseChat(user) { setShowPersonCard(false); setPulseChatUser(user); }
+  function closePulseChat() { setPulseChatUser(null); setNearbyUser(null); }
+  function handleConnect() { setPulseChatUser(null); setNearbyUser(null); }
+  function openSpontaneousSheet(user, sharedTags) {
+    if (document.activeElement) document.activeElement.blur();
+    setTimeout(() => { setPulseChatUser(null); setSpontaneousTarget({ user, sharedTags }); }, 500);
   }
-  function handleSpontaneousCreate(data){
-    var nc=makeCircle({ownerId:currentUser?.id||"user_local",name:data.name,type:"closed",pulseable:false,passphrase:"",dist:0.1,members:2,angle:-20,r:90,tags:data.tags,governance:{mode:"admin",admins:[]},isOwn:true});
-    setAllChats(p=>[...p,nc]);setJoinedIds(p=>new Set([...p,nc.id]));
-    setSpontaneousTarget(null);setSelectedChat(nc);
+  function handleSpontaneousCreate(data) {
+    var nc = makeCircle({ ownerId: currentUser?.id || "user_local", name: data.name, type: "closed", pulseable: false, passphrase: "", dist: 0.1, members: 2, angle: -20, r: 90, tags: data.tags, governance: { mode: "admin", admins: [] }, isOwn: true });
+    setAllChats(p => [...p, nc]); setJoinedIds(p => new Set([...p, nc.id]));
+    setSpontaneousTarget(null); setSelectedChat(nc);
   }
-  function openCircleJoin(circle){setShowCircleCard(false);setJoinTarget(circle);}
-  function goToInterestMatch(circle){setInterestMatchCircle(null);setHighlightedCircleId(circle.id);setTab("map");setTimeout(()=>setHighlightedCircleId(null),4000);}
+  function openCircleJoin(circle) { setShowCircleCard(false); setJoinTarget(circle); }
+  function goToInterestMatch(circle) { setInterestMatchCircle(null); setHighlightedCircleId(circle.id); setTab("map"); setTimeout(() => setHighlightedCircleId(null), 4000); }
 
-  function updateStatus(s){setCurrentUser(u=>({...u,status:s}));}
-  function updatePresets(p){setCurrentUser(u=>({...u,statusPresets:p}));}
+  // ── Pulse button ──────────────────────────────────────────────────────────
+  function revealHiddenNote(id, note) {
+    setRevealedNoteIds(prev => {
+      if (prev.has(id)) return prev;
+      if (note) {
+        clearTimeout(hiddenNoteNotifTimer.current);
+        setHiddenNoteNotif(note);
+        hiddenNoteNotifTimer.current = setTimeout(() => setHiddenNoteNotif(null), 4000);
+      }
+      return new Set([...prev, id]);
+    });
+  }
 
-  const firePulse=useCallback(()=>{
+  const firePulse = useCallback(() => {
     cancelAnimationFrame(pulseHoldRaf.current);
-    setPulseParticles(genPulseParticles(90));setOutwardParticles(genOutwardParticles(69));
-    setHoldProgress(1);setPulseState("fired");setReturnProgress(0);setPulseFired(true);setBumpActive(false);
-    setAllChats(chats=>{chats.forEach(c=>{if(c.type==="hidden"&&c.pulseable!==false)revealHiddenCircle(c.id);});return chats;});
-    // Reveal hidden notes via pulse
-    setNotes(ns=>{ns.forEach(n=>{if(n.placed&&n.visibility==="hidden")revealHiddenNote(n.id,n);});return ns;});
-    var outDur=2200,retDur=1100,silMs=300,outStart=performance.now();
-    function outTick(){var p=Math.min(1,(performance.now()-outStart)/outDur);setRippleProgress(p);if(p<1){rippleRaf.current=requestAnimationFrame(outTick);}else{setPulseFired(false);setInwardParticles(genInwardParticles(56));var retStart=performance.now()+silMs;function retTick(){var now=performance.now();if(now<retStart){rippleRaf.current=requestAnimationFrame(retTick);return;}var rp=Math.min(1,(now-retStart)/retDur);setReturnProgress(rp);if(rp<1){rippleRaf.current=requestAnimationFrame(retTick);}else{setRippleProgress(0);setReturnProgress(0);setHoldProgress(0);setPulseState("cooling");coolingTimer.current=setTimeout(()=>setPulseState("idle"),2500);}}rippleRaf.current=requestAnimationFrame(retTick);}}
-    rippleRaf.current=requestAnimationFrame(outTick);
-  },[]);
+    setPulseParticles(genPulseParticles(90)); setOutwardParticles(genOutwardParticles(69));
+    setHoldProgress(1); setPulseState("fired"); setReturnProgress(0); setPulseFired(true); setBumpActive(false);
+    setAllChats(chats => { chats.forEach(c => { if (c.type === "hidden" && c.pulseable !== false) revealHiddenCircle(c.id); }); return chats; });
+    setNotes(ns => { ns.forEach(n => { if (n.placed && n.visibility === "hidden") revealHiddenNote(n.id, n); }); return ns; });
+    var outDur = 2200, retDur = 1100, silMs = 300, outStart = performance.now();
+    function outTick() {
+      var p = Math.min(1, (performance.now() - outStart) / outDur);
+      setRippleProgress(p);
+      if (p < 1) { rippleRaf.current = requestAnimationFrame(outTick); } else {
+        setPulseFired(false); setInwardParticles(genInwardParticles(56));
+        var retStart = performance.now() + silMs;
+        function retTick() {
+          var now = performance.now();
+          if (now < retStart) { rippleRaf.current = requestAnimationFrame(retTick); return; }
+          var rp = Math.min(1, (now - retStart) / retDur);
+          setReturnProgress(rp);
+          if (rp < 1) { rippleRaf.current = requestAnimationFrame(retTick); } else {
+            setRippleProgress(0); setReturnProgress(0); setHoldProgress(0);
+            setPulseState("cooling"); coolingTimer.current = setTimeout(() => setPulseState("idle"), 2500);
+          }
+        }
+        rippleRaf.current = requestAnimationFrame(retTick);
+      }
+    }
+    rippleRaf.current = requestAnimationFrame(outTick);
+  }, []);
 
-  const startPulseHold=useCallback((e)=>{if(pulseState!=="idle")return;var el=e.currentTarget.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX,cy=e.touches?e.touches[0].clientY:e.clientY;setTouchPt({x:((cx-el.left)/el.width)*128,y:((cy-el.top)/el.width)*128});pulseHoldStart.current=performance.now();setPulseState("charging");function tick(){var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);setHoldProgress(p);if(p<1){pulseHoldRaf.current=requestAnimationFrame(tick);}}pulseHoldRaf.current=requestAnimationFrame(tick);},[pulseState]);
-  const cancelPulseHold=useCallback(()=>{if(pulseState!=="charging")return;cancelAnimationFrame(pulseHoldRaf.current);var p=Math.min(1,(performance.now()-pulseHoldStart.current)/HOLD_MS);if(p>=.8){firePulse();}else{setPulseState("idle");setHoldProgress(0);}},[pulseState,firePulse]);
+  const startPulseHold = useCallback((e) => {
+    if (pulseState !== "idle") return;
+    var el = e.currentTarget.getBoundingClientRect();
+    var cx = e.touches ? e.touches[0].clientX : e.clientX, cy = e.touches ? e.touches[0].clientY : e.clientY;
+    setTouchPt({ x: ((cx - el.left) / el.width) * 128, y: ((cy - el.top) / el.width) * 128 });
+    pulseHoldStart.current = performance.now(); setPulseState("charging");
+    function tick() { var p = Math.min(1, (performance.now() - pulseHoldStart.current) / HOLD_MS); setHoldProgress(p); if (p < 1) pulseHoldRaf.current = requestAnimationFrame(tick); }
+    pulseHoldRaf.current = requestAnimationFrame(tick);
+  }, [pulseState]);
 
-  function toSVG(cx,cy){
-    if(!svgRef.current)return{x:0,y:0};
-    var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();
-    // xMidYMid meet: uniform scale, centered. Calculate actual scale and offset.
-    var scaleX=rect.width/350,scaleY=rect.height/420;
-    var scale=Math.min(scaleX,scaleY);
-    var offX=(rect.width-350*scale)/2;
-    var offY=(rect.height-420*scale)/2;
-    return{x:(cx-rect.left-offX)/scale,y:(cy-rect.top-offY)/scale};
+  const cancelPulseHold = useCallback(() => {
+    if (pulseState !== "charging") return;
+    cancelAnimationFrame(pulseHoldRaf.current);
+    var p = Math.min(1, (performance.now() - pulseHoldStart.current) / HOLD_MS);
+    if (p >= 0.8) { firePulse(); } else { setPulseState("idle"); setHoldProgress(0); }
+  }, [pulseState, firePulse]);
+
+  // ── SVG coordinate helper ─────────────────────────────────────────────────
+  function toSVG(clientX, clientY) {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    var rect = svgRectCache.current || svgRef.current.getBoundingClientRect();
+    var scaleX = rect.width / 350, scaleY = rect.height / 420, scale = Math.min(scaleX, scaleY);
+    var offX = (rect.width - 350 * scale) / 2, offY = (rect.height - 420 * scale) / 2;
+    return { x: (clientX - rect.left - offX) / scale, y: (clientY - rect.top - offY) / scale };
   }
 
-  const onDrawStart=useCallback((e)=>{e.preventDefault();if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();setDrawPhaseSync("drawing");setDrawPath([]);setLiveRadius(0);},[]);
-  const onDrawMove=useCallback((e)=>{e.preventDefault();var c=e.touches?e.touches[0]:e;var pos=toSVG(c.clientX,c.clientY);setDrawPath(p=>[...p,pos]);},[]);
-  const onDrawEnd=useCallback(()=>{
+  // ── Draw gesture ──────────────────────────────────────────────────────────
+  const onDrawStart = useCallback((e) => {
+    e.preventDefault();
+    if (svgRef.current) svgRectCache.current = svgRef.current.getBoundingClientRect();
+    setDrawPhaseSync("drawing"); setDrawPath([]);
+  }, []);
+
+  const onDrawMove = useCallback((e) => {
+    e.preventDefault();
+    var c = e.touches ? e.touches[0] : e;
+    var pos = toSVG(c.clientX, c.clientY);
+    setDrawPath(p => [...p, pos]);
+  }, []);
+
+  const onDrawEnd = useCallback(() => {
     setDrawPhaseSync("done");
-    setDrawPath(path=>{
-      if(path.length>0){
-        var avg=path.reduce((sum,p)=>sum+Math.sqrt((p.x-CX)**2+(p.y-CY)**2),0)/path.length;
-        var fitted=Math.max(MIN_R,Math.min(MAX_R,avg));
-        setRadius(fitted);
-        setCircleScale(0);
-        requestAnimationFrame(()=>{
-          var start=performance.now(),dur=400;
-          function tick(){
-            var t=Math.min(1,(performance.now()-start)/dur);
-            var eased=1-Math.pow(1-t,3);
-            setCircleScale(eased);
-            if(t<1)requestAnimationFrame(tick);
-          }
+    setDrawPath(path => {
+      if (path.length > 0) {
+        var avg = path.reduce((sum, p) => sum + Math.sqrt((p.x - CX) ** 2 + (p.y - CY) ** 2), 0) / path.length;
+        var fitted = Math.max(MIN_R, Math.min(MAX_R, avg));
+        setRadius(fitted); setCircleScale(0);
+        requestAnimationFrame(() => {
+          var start = performance.now(), dur = 400;
+          function tick() { var t = Math.min(1, (performance.now() - start) / dur); setCircleScale(1 - Math.pow(1 - t, 3)); if (t < 1) requestAnimationFrame(tick); }
           requestAnimationFrame(tick);
         });
       }
       return path;
     });
-  },[]);
+  }, []);
 
-  const startPlantHold=useCallback((pos)=>{setPlantParticles(genPlantParticles(85));plantHoldActive.current=true;plantHoldStart.current=performance.now();plantPosRef.current=pos;setPlantPos(pos);setPlantHold(0);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;function tick(){if(!plantHoldActive.current)return;var p=Math.min(1,(performance.now()-plantHoldStart.current)/PLANT_MS);plantHoldProgressRef.current=p;setPlantHold(p);if(p<1){plantRaf.current=requestAnimationFrame(tick);}else{plantHoldActive.current=false;var ss=performance.now();function stampTick(){var sp=Math.min(1,(performance.now()-ss)/400);plantStampProgressRef.current=sp;setPlantStamp(sp);if(sp<1){stampRaf.current=requestAnimationFrame(stampTick);}else{var fp=plantPosRef.current;setPendingPos(fp);setCreating(true);setPlantHold(0);setPlantPos(null);setPlantStamp(0);plantHoldProgressRef.current=0;plantStampProgressRef.current=0;}}stampRaf.current=requestAnimationFrame(stampTick);}}plantRaf.current=requestAnimationFrame(tick);},[]);
-  const cancelPlantHold=useCallback(()=>{plantHoldActive.current=false;cancelAnimationFrame(plantRaf.current);if(plantStampProgressRef.current===0){setPlantHold(0);setPlantPos(null);plantHoldProgressRef.current=0;}},[]);
-  const onMapDown=useCallback((e)=>{
-    // Note placement mode — tap anywhere to place
-    if(placingNoteRef.current){
-      var c0=e.touches?e.touches[0]:e;
-      if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();
-      placeNoteRef.current(toSVG(c0.clientX,c0.clientY));
-      return;
-    }
-    if(drawPhaseRef.current==="idle"){onDrawStart(e);return;}
-    if(drawPhaseRef.current==="drawing")return;
-    if(drawPhaseRef.current==="done"){
-      var c=e.touches?e.touches[0]:e;
-      if(svgRef.current)svgRectCache.current=svgRef.current.getBoundingClientRect();
-      var pos=toSVG(c.clientX,c.clientY);
-      panMoveTotal.current=0;isPanning.current=false;
-      var rectW=svgRectCache.current?svgRectCache.current.width:350;
-      panOrigin.current={clientX:c.clientX,clientY:c.clientY,px:panX,py:panY,scale:350/rectW};
-      startPlantHold({x:pos.x-panX,y:pos.y-panY});
-    }
-  },[onDrawStart,startPlantHold,panX,panY]);
-
-  const onMapMove=useCallback((e)=>{
-    if(drawPhaseRef.current==="drawing"){onDrawMove(e);return;}
-    var c=e.touches?e.touches[0]:e;
-    if(dragging.current&&svgRef.current){
-      e.preventDefault();
-      var rect=svgRectCache.current||svgRef.current.getBoundingClientRect();
-      var scaleX2=rect.width/350,scaleY2=rect.height/420,scale2=Math.min(scaleX2,scaleY2);
-      var offX2=(rect.width-350*scale2)/2,offY2=(rect.height-420*scale2)/2;
-      var dx=(c.clientX-rect.left-offX2)/scale2-CX,dy=(c.clientY-rect.top-offY2)/scale2-CY;
-      setRadius(Math.max(MIN_R,Math.min(MAX_R,Math.sqrt(dx*dx+dy*dy))));
-      return;
-    }
-    if(drawPhaseRef.current==="done"&&panOrigin.current){
-      var dx2=c.clientX-panOrigin.current.clientX,dy2=c.clientY-panOrigin.current.clientY;
-      var moved=Math.sqrt(dx2*dx2+dy2*dy2);
-      panMoveTotal.current=moved;
-      if(!isPanning.current&&moved>6){isPanning.current=true;cancelPlantHold();}
-      if(isPanning.current){
-        e.preventDefault();
-        setPanX(panOrigin.current.px+dx2*(panOrigin.current.scale||1));
-        setPanY(panOrigin.current.py+dy2*(panOrigin.current.scale||1));
+  // ── Plant hold ────────────────────────────────────────────────────────────
+  const startPlantHold = useCallback((pos) => {
+    setPlantParticles(genPlantParticles(85));
+    plantHoldActive.current = true; plantHoldStart.current = performance.now();
+    plantPosRef.current = pos; setPlantPos(pos); setPlantHold(0); setPlantStamp(0);
+    plantHoldProgressRef.current = 0; plantStampProgressRef.current = 0;
+    function tick() {
+      if (!plantHoldActive.current) return;
+      var p = Math.min(1, (performance.now() - plantHoldStart.current) / PLANT_MS);
+      plantHoldProgressRef.current = p; setPlantHold(p);
+      if (p < 1) { plantRaf.current = requestAnimationFrame(tick); } else {
+        plantHoldActive.current = false;
+        var ss = performance.now();
+        function stampTick() {
+          var sp = Math.min(1, (performance.now() - ss) / 400);
+          plantStampProgressRef.current = sp; setPlantStamp(sp);
+          if (sp < 1) { stampRaf.current = requestAnimationFrame(stampTick); } else {
+            var fp = plantPosRef.current;
+            setPendingPos(fp); setCreating(true); setPlantHold(0); setPlantPos(null); setPlantStamp(0);
+            plantHoldProgressRef.current = 0; plantStampProgressRef.current = 0;
+          }
+        }
+        stampRaf.current = requestAnimationFrame(stampTick);
       }
     }
-  },[onDrawMove,cancelPlantHold]);
+    plantRaf.current = requestAnimationFrame(tick);
+  }, []);
 
-  const onMapUp=useCallback(()=>{
-    svgRectCache.current=null;
-    if(drawPhaseRef.current==="drawing"){onDrawEnd();return;}
-    dragging.current=false;
-    if(isPanning.current){isPanning.current=false;panOrigin.current=null;return;}
-    panOrigin.current=null;
-    cancelPlantHold();
-  },[onDrawEnd,cancelPlantHold]);
+  const cancelPlantHold = useCallback(() => {
+    plantHoldActive.current = false; cancelAnimationFrame(plantRaf.current);
+    if (plantStampProgressRef.current === 0) { setPlantHold(0); setPlantPos(null); plantHoldProgressRef.current = 0; }
+  }, []);
 
-  function resetRadius(){setDrawPhaseSync("idle");setRadius(null);setDrawPath([]);setLiveRadius(0);setCircleScale(1);setPanX(0);setPanY(0);}
+  // ── Map pointer handlers ──────────────────────────────────────────────────
+  const onMapDown = useCallback((e) => {
+    if (placingNoteRef.current) {
+      var c0 = e.touches ? e.touches[0] : e;
+      if (svgRef.current) svgRectCache.current = svgRef.current.getBoundingClientRect();
+      placeNoteRef.current(toSVG(c0.clientX, c0.clientY));
+      return;
+    }
+    if (drawPhaseRef.current === "idle") { onDrawStart(e); return; }
+    if (drawPhaseRef.current === "drawing") return;
+    if (drawPhaseRef.current === "done") {
+      var c = e.touches ? e.touches[0] : e;
+      if (svgRef.current) svgRectCache.current = svgRef.current.getBoundingClientRect();
+      var pos = toSVG(c.clientX, c.clientY);
+      panMoveTotal.current = 0; isPanning.current = false;
+      var rectW = svgRectCache.current ? svgRectCache.current.width : 350;
+      panOrigin.current = { clientX: c.clientX, clientY: c.clientY, px: panX, py: panY, scale: 350 / rectW };
+      startPlantHold({ x: pos.x - panX, y: pos.y - panY });
+    }
+  }, [onDrawStart, startPlantHold, panX, panY]);
 
-  function finishNote(data){
-    var note=makeNote({text:data.text,tags:data.tags,visibility:data.visibility,ownerId:currentUser?.id||"user_local"});
-    setNotes(prev=>[...prev,note]);
+  const onMapMove = useCallback((e) => {
+    if (drawPhaseRef.current === "drawing") { onDrawMove(e); return; }
+    var c = e.touches ? e.touches[0] : e;
+    if (dragging.current && svgRef.current) {
+      e.preventDefault();
+      var rect = svgRectCache.current || svgRef.current.getBoundingClientRect();
+      var scale2 = Math.min(rect.width / 350, rect.height / 420);
+      var offX2 = (rect.width - 350 * scale2) / 2, offY2 = (rect.height - 420 * scale2) / 2;
+      var dx = (c.clientX - rect.left - offX2) / scale2 - CX, dy = (c.clientY - rect.top - offY2) / scale2 - CY;
+      setRadius(Math.max(MIN_R, Math.min(MAX_R, Math.sqrt(dx * dx + dy * dy)))); return;
+    }
+    if (drawPhaseRef.current === "done" && panOrigin.current) {
+      var dx2 = c.clientX - panOrigin.current.clientX, dy2 = c.clientY - panOrigin.current.clientY;
+      var moved = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      panMoveTotal.current = moved;
+      if (!isPanning.current && moved > 6) { isPanning.current = true; cancelPlantHold(); }
+      if (isPanning.current) {
+        e.preventDefault();
+        setPanX(panOrigin.current.px + dx2 * (panOrigin.current.scale || 1));
+        setPanY(panOrigin.current.py + dy2 * (panOrigin.current.scale || 1));
+      }
+    }
+  }, [onDrawMove, cancelPlantHold]);
+
+  const onMapUp = useCallback(() => {
+    svgRectCache.current = null;
+    if (drawPhaseRef.current === "drawing") { onDrawEnd(); return; }
+    dragging.current = false;
+    if (isPanning.current) { isPanning.current = false; panOrigin.current = null; return; }
+    panOrigin.current = null; cancelPlantHold();
+  }, [onDrawEnd, cancelPlantHold]);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", onMapMove);
+    window.addEventListener("mouseup", onMapUp);
+    window.addEventListener("touchmove", onMapMove, { passive: false });
+    window.addEventListener("touchend", onMapUp);
+    return () => {
+      window.removeEventListener("mousemove", onMapMove);
+      window.removeEventListener("mouseup", onMapUp);
+      window.removeEventListener("touchmove", onMapMove);
+      window.removeEventListener("touchend", onMapUp);
+    };
+  }, [onMapMove, onMapUp]);
+
+  function resetRadius() { setDrawPhaseSync("idle"); setRadius(null); setDrawPath([]); setCircleScale(1); setPanX(0); setPanY(0); }
+
+  // ── Notes handlers ────────────────────────────────────────────────────────
+  function finishNote(data) {
+    var note = makeNote({ text: data.text, tags: data.tags, visibility: data.visibility, ownerId: currentUser?.id || "user_local" });
+    setNotes(prev => [...prev, note]);
     setNotesView("list");
   }
 
-  function startPlacingNote(note){
-    setNotesPanelOpen(false);
-    setPlacingNoteSync(note);
-  }
+  function startPlacingNote(note) { setNotesPanelOpen(false); setPlacingNoteSync(note); }
 
-  var placeNoteRef=useRef(null);
-  function placeNote(svgPos){
-    var pn=placingNoteRef.current;
-    if(!pn)return;
-    // TODO: replace with GPS confirmation in production
-    var placed={...pn,placed:true,placedPos:{x:svgPos.x-panX,y:svgPos.y-panY}};
-    setNotes(prev=>prev.map(n=>n.id===pn.id?placed:n));
+  function placeNote(svgPos) {
+    var pn = placingNoteRef.current; if (!pn) return;
+    var placed = { ...pn, placed: true, placedPos: { x: svgPos.x - panX, y: svgPos.y - panY } };
+    setNotes(prev => prev.map(n => n.id === pn.id ? placed : n));
     setPlacingNoteSync(null);
-    // Stamp animation
-    setStampingNoteId(pn.id);
-    setTimeout(()=>setStampingNoteId(null),600);
+    setStampingNoteId(pn.id); setTimeout(() => setStampingNoteId(null), 600);
   }
-  placeNoteRef.current=placeNote;
+  placeNoteRef.current = placeNote;
 
-  function revealHiddenNote(id,note){
-    setRevealedNoteIds(prev=>{if(prev.has(id))return prev;
-      // Fire discovery notification
-      if(note){
-        clearTimeout(hiddenNoteNotifTimer.current);
-        setHiddenNoteNotif(note);
-        hiddenNoteNotifTimer.current=setTimeout(()=>setHiddenNoteNotif(null),4000);
-      }
-      return new Set([...prev,id]);
-    });
+  function handleNoteClick(note) {
+    if (note.visibility === "hidden" && !smoothedNoteIds.has(note.id)) { setCrumpledNote(note); return; }
+    setUnfoldingNote(note); setTimeout(() => { setUnfoldingNote(null); setReadingNote(note); }, 350);
   }
 
-  // Proximity tag-match: reveal hidden notes whose tags overlap user's tags
-  // Only fires after initial mount (hasPlacedRef prevents instant reveal on load)
-  var hasProximityRun=useRef(false);
-  useEffect(()=>{
-    if(!currentUser||!hasProximityRun.current){hasProximityRun.current=true;return;}
-    var userTags=currentUser.tags||[];
-    notes.forEach(n=>{
-      if(n.placed&&n.visibility==="hidden"&&!revealedNoteIds.has(n.id)){
-        var overlap=n.tags.filter(t=>userTags.includes(t)).length;
-        if(overlap>0)revealHiddenNote(n.id,n);
+  function handleNoteSmoothed(note) {
+    setSmoothedNoteIds(prev => new Set([...prev, note.id]));
+    setCrumpledNote(null); setTimeout(() => setReadingNote(note), 200);
+  }
+
+  // Proximity reveal: hidden notes whose tags match user interests
+  var hasProximityRun = useRef(false);
+  useEffect(() => {
+    if (!currentUser || !hasProximityRun.current) { hasProximityRun.current = true; return; }
+    var userTags = currentUser.tags || [];
+    notes.forEach(n => {
+      if (n.placed && n.visibility === "hidden" && !revealedNoteIds.has(n.id)) {
+        if (n.tags.filter(t => userTags.includes(t)).length > 0) revealHiddenNote(n.id, n);
       }
     });
-  },[notes]);
+  }, [notes]);
 
-  function handleNoteClick(note){
-    if(note.visibility==="hidden"&&!smoothedNoteIds.has(note.id)){
-      setCrumpledNote(note);return;
-    }
-    setUnfoldingNote(note);
-    setTimeout(()=>{setUnfoldingNote(null);setReadingNote(note);},350);
-  }
-
-  function handleNoteSmoothed(note){
-    setSmoothedNoteIds(prev=>new Set([...prev,note.id]));
-    setCrumpledNote(null);
-    setTimeout(()=>setReadingNote(note),200);
-  }
-
-  useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
-
-  function handleChatClick(chat){
-    if(chat.type==="hidden"&&!joinedIds.has(chat.id)){setJoinTarget(chat);return;}
-    if(chat.type==="closed"&&!joinedIds.has(chat.id)&&!chat.isOwn){setJoinTarget(chat);return;}
+  // ── Circle handlers ───────────────────────────────────────────────────────
+  function handleChatClick(chat) {
+    if (chat.type === "hidden" && !joinedIds.has(chat.id)) { setJoinTarget(chat); return; }
+    if (chat.type === "closed" && !joinedIds.has(chat.id) && !chat.isOwn) { setJoinTarget(chat); return; }
     setSelectedChat(chat);
   }
-  function handleJoined(chat){setJoinedIds(prev=>new Set([...prev,chat.id]));setJoinTarget(null);if(chat.msgs!==undefined)setSelectedChat(chat);}
-  function handleRequestSent(chatId,req){setAllChats(prev=>prev.map(c=>c.id===chatId?{...c,pendingRequests:[...(c.pendingRequests||[]),req]}:c));}
-  const handleCreateComplete=useCallback((data)=>{
-    var pos=pendingPos;
-    var nc=makeCircle({ownerId:currentUser?.id||"user_local",name:data.name,type:data.type,pulseable:data.type==="hidden"?data.pulseable:true,passphrase:data.passphrase||"",dist:0,members:1,angle:Math.atan2(pos?pos.y-CY:-1,pos?pos.x-CX:0)*180/Math.PI,r:pos?Math.sqrt((pos.x-CX)**2+(pos.y-CY)**2):80,tags:data.tags,governance:data.governance,isOwn:true,color:data.color||null});
-    setAllChats(p=>[...p,nc]);if(data.type!=="hidden")setJoinedIds(p=>new Set([...p,nc.id]));
-    setCreating(false);setPendingPos(null);setTab("map");
-  },[pendingPos,currentUser]);
-  function sendMsg(){if(!msgInput.trim()||!selectedChat||!currentUser)return;var id=selectedChat.id,nm=makeMessage(msgInput.trim(),currentUser.id,currentUser.handle);setAllChats(prev=>prev.map(c=>c.id===id?{...c,msgs:[...c.msgs,nm]}:c));setMsgInput("");}
 
-  var outerShell={background:BG_OUTER,minHeight:"100%",display:"flex",flexDirection:"column",alignItems:"stretch",fontFamily:font,userSelect:"none",WebkitUserSelect:"none",WebkitTapHighlightColor:"transparent",overflowX:"hidden",width:"100%",flex:1};
-  var phoneCard={background:BG,width:"100%",flex:1,display:"flex",flexDirection:"column",position:"relative",boxSizing:"border-box"};
+  function handleJoined(chat) { setJoinedIds(prev => new Set([...prev, chat.id])); setJoinTarget(null); if (chat.msgs !== undefined) setSelectedChat(chat); }
+  function handleRequestSent(chatId, req) { setAllChats(prev => prev.map(c => c.id === chatId ? { ...c, pendingRequests: [...(c.pendingRequests || []), req] } : c)); }
 
-  if(!currentUser)return(<div style={outerShell}><div style={phoneCard}><OnboardingFlow onComplete={u=>setCurrentUser(u)}/></div></div>);
+  const handleCreateComplete = useCallback((data) => {
+    var pos = pendingPos;
+    var nc = makeCircle({ ownerId: currentUser?.id || "user_local", name: data.name, type: data.type, pulseable: data.type === "hidden" ? data.pulseable : true, passphrase: data.passphrase || "", dist: 0, members: 1, angle: Math.atan2(pos ? pos.y - CY : -1, pos ? pos.x - CX : 0) * 180 / Math.PI, r: pos ? Math.sqrt((pos.x - CX) ** 2 + (pos.y - CY) ** 2) : 80, tags: data.tags, governance: data.governance, isOwn: true, color: data.color || null });
+    setAllChats(p => [...p, nc]); if (data.type !== "hidden") setJoinedIds(p => new Set([...p, nc.id]));
+    setCreating(false); setPendingPos(null); setTab("map");
+  }, [pendingPos, currentUser]);
 
-  var visibleChats=radius?allChats.filter(c=>{
-    if(c.type==="hidden")return false;
-    var x=CX+c.r*Math.cos((c.angle*Math.PI)/180)+panX;
-    var y=CY+c.r*Math.sin((c.angle*Math.PI)/180)+panY;
-    return Math.sqrt((x-CX)*(x-CX)+(y-CY)*(y-CY))<=radius;
-  }):[];
-  var radiusMiles=radius?((radius/MAX_R)*2).toFixed(1):"—";
-  var hasRadius=drawPhase==="done"&&radius!==null;
-  var isDrawing=drawPhase==="drawing";
-  var isCharging=pulseState==="charging";
-  var isFired=pulseState==="fired";
-  var showReturn=returnProgress>0;
-  var pulseLabel=isCharging?"charging...":(isFired&&!showReturn)?"pulsing...":showReturn?"incoming...":pulseState==="cooling"?"sent":"hold to pulse";
-  var eased=1-Math.pow(1-returnProgress,2);
-  var retR=STAGE_R*(1-eased)+BTN_R*eased;
-  var retOp=returnProgress<.85?.7:((1-returnProgress)/.15)*.7;
-
-  function handleCircleSave(updated,nameChanged,tagsChanged){
-    setAllChats(prev=>prev.map(c=>c.id===updated.id?updated:c));
-    if(selectedChat?.id===updated.id)setSelectedChat(updated);
-    // Notify members if name or tags changed (simulated)
-    if(nameChanged||tagsChanged){
-      var msg=nameChanged&&tagsChanged?"Circle name and tags updated."
-        :nameChanged?"Circle name updated to \""+updated.name+"\"."
-        :"Circle tags updated.";
-      setAllChats(prev=>prev.map(c=>c.id===updated.id?{...c,msgs:[...c.msgs,{id:Date.now(),text:msg,senderHandle:"system",senderId:"system",ts:Date.now()}]}:c));
+  function handleCircleSave(updated, nameChanged, tagsChanged) {
+    setAllChats(prev => prev.map(c => c.id === updated.id ? updated : c));
+    if (selectedChat?.id === updated.id) setSelectedChat(updated);
+    if (nameChanged || tagsChanged) {
+      var msg = nameChanged && tagsChanged ? "Circle name and tags updated." : nameChanged ? `Circle name updated to "${updated.name}".` : "Circle tags updated.";
+      setAllChats(prev => prev.map(c => c.id === updated.id ? { ...c, msgs: [...c.msgs, { id: Date.now(), text: msg, senderHandle: "system", senderId: "system", ts: Date.now() }] } : c));
     }
   }
 
-  var liveChat=selectedChat?(allChats.find(c=>c.id===selectedChat.id)||selectedChat):null;
-  var msgs=liveChat?liveChat.msgs||[]:[];
-  var chatColor=selectedChat?circleColor(selectedChat):INK;
+  function sendMsg() {
+    if (!msgInput.trim() || !selectedChat || !currentUser) return;
+    var id = selectedChat.id, nm = makeMessage(msgInput.trim(), currentUser.id, currentUser.handle);
+    setAllChats(prev => prev.map(c => c.id === id ? { ...c, msgs: [...c.msgs, nm] } : c));
+    setMsgInput("");
+  }
 
-  return(<><div style={outerShell}><div style={phoneCard}>
-    {joinTarget&&<JoinModal chat={joinTarget} onClose={()=>setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent}/>}
-    {showPersonCard&&nearbyUser&&<PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson}/>}
-    {showCircleCard&&nearbyCircle&&<CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle}/>}
-    {interestMatchCircle&&<InterestMatchNotif circle={interestMatchCircle} sharedTags={interestMatchTags} onGo={()=>goToInterestMatch(interestMatchCircle)} onDismiss={()=>setInterestMatchCircle(null)}/>}
-    {/* Hidden note discovery notification */}
-    {hiddenNoteNotif&&(
-      <div onClick={()=>{setHiddenNoteNotif(null);setCrumpledNote(hiddenNoteNotif);}} style={{
-        position:"fixed",top:0,left:0,right:0,zIndex:200,
-        background:INK,color:NOTE_BG,
-        padding:"10px 18px",display:"flex",alignItems:"center",gap:10,
-        cursor:"pointer",fontFamily:font,
-        animation:"noteUnfold 0.3s ease",
-      }}>
-        <svg width={16} height={12} viewBox="0 0 16 12">
-          <rect x={0} y={0} width={16} height={12} fill="none" stroke={NOTE_BG} strokeWidth="1" rx="0.5"/>
-          <polyline points="0,0 8,6.5 16,0" fill="none" stroke={NOTE_BG} strokeWidth="0.9"/>
-        </svg>
-        <div style={{flex:1}}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Hidden note found nearby</div>
-          <div style={{fontSize:8,opacity:0.6,marginTop:1}}>tap to reveal</div>
-        </div>
-        <button onClick={e=>{e.stopPropagation();setHiddenNoteNotif(null);}} style={{background:"none",border:"none",color:NOTE_BG,fontSize:16,cursor:"pointer",opacity:0.5,padding:0}}>×</button>
-      </div>
-    )}
+  function updateUser(patch) { setCurrentUser(u => ({ ...u, ...patch })); }
+  function updateStatus(s) { setCurrentUser(u => ({ ...u, status: s })); }
+  function updatePresets(p) { setCurrentUser(u => ({ ...u, statusPresets: p })); }
 
-    {pulseChatUser&&<>
-      {spontaneousTarget&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/> }
-      <PulseChat currentUser={currentUser} otherUser={pulseChatUser} onStartCircle={openSpontaneousSheet} onConnect={handleConnect} onDismiss={closePulseChat}/>
-    </>}
-    {spontaneousTarget&&!pulseChatUser&&<SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={()=>setSpontaneousTarget(null)}/> }
-    {creating&&<CreateFlow onComplete={handleCreateComplete} onCancel={()=>{setCreating(false);setPendingPos(null);}}/> }
-    {selectedChat&&!pulseChatUser&&!creating&&<>
-      <div style={{padding:"16px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",gap:14,minHeight:56}}>
-        <button onClick={()=>setSelectedChat(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,padding:"0 8px 0 0",minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>&#8592;</button>
-        <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}><div style={{width:11,height:11,borderRadius:"50%",background:chatColor,flexShrink:0}}/><div><div style={{fontWeight:900,fontSize:15,letterSpacing:1,textTransform:"uppercase",color:INK}}>{selectedChat.name}</div><div style={{fontSize:10,color:INK_MID,letterSpacing:.8,marginTop:2}}>{selectedChat.type.toUpperCase()} · {selectedChat.dist}mi</div></div></div>
-        {selectedChat.isOwn&&<button onClick={e=>{e.stopPropagation();setEditingCircle(liveChat);}} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",padding:"5px 10px",cursor:"pointer",minHeight:32,flexShrink:0}}>Edit</button>}
-      </div>
-      {selectedChat.tags&&selectedChat.tags.length>0&&<div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:6,flexWrap:"wrap"}}>{selectedChat.tags.map(t=><span key={t} style={{fontSize:8,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",border:"1px solid "+INK_LIGHT,padding:"2px 7px",color:INK_MID}}>{t}</span>)}</div>}
-      <div style={{flex:1,padding:"16px 18px",overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>{msgs.map((m,i)=>(<div key={m.id||i} style={{paddingBottom:10,borderBottom:"1px solid "+INK_LIGHT}}><div style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:m.senderId===currentUser.id?INK:INK_MID,marginBottom:3}}>{m.senderId===currentUser.id?"You":m.senderHandle}</div><div style={{fontSize:14,lineHeight:1.65,color:INK}}>{m.text}</div></div>))}{msgs.length===0&&<div style={{color:INK_MID,fontSize:13,fontStyle:"italic"}}>No messages yet. Say something.</div>}</div>
-      <div style={{padding:"12px 18px",borderTop:"1.5px solid "+INK,display:"flex",gap:10,alignItems:"center"}}><input value={msgInput} onChange={e=>setMsgInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendMsg();}} placeholder="Write something..." style={{flex:1,background:"none",border:"none",borderBottom:"1.5px solid "+INK,outline:"none",fontFamily:font,fontSize:16,color:INK,padding:"6px 0"}}/><button onClick={sendMsg} style={{background:INK,color:BG,border:"none",padding:"10px 16px",fontFamily:font,fontWeight:700,fontSize:10,cursor:"pointer",letterSpacing:1.5,minHeight:44}}>SEND</button></div>
-    </>}
+  // ── Derived values ────────────────────────────────────────────────────────
+  var hasRadius = drawPhase === "done" && radius !== null;
+  var isDrawing = drawPhase === "drawing";
+  var isCharging = pulseState === "charging";
+  var isFired = pulseState === "fired";
+  var showReturn = returnProgress > 0;
+  var pulseLabel = isCharging ? "charging..." : (isFired && !showReturn) ? "pulsing..." : showReturn ? "incoming..." : pulseState === "cooling" ? "sent" : "hold to pulse";
+  var visibleChats = radius ? allChats.filter(c => {
+    if (c.type === "hidden") return false;
+    var x = CX + c.r * Math.cos((c.angle * Math.PI) / 180) + panX;
+    var y = CY + c.r * Math.sin((c.angle * Math.PI) / 180) + panY;
+    return Math.sqrt((x - CX) ** 2 + (y - CY) ** 2) <= radius;
+  }) : [];
+  var radiusMiles = radius ? ((radius / MAX_R) * 2).toFixed(1) : "—";
+  var liveChat = selectedChat ? (allChats.find(c => c.id === selectedChat.id) || selectedChat) : null;
+  var msgs = liveChat ? liveChat.msgs || [] : [];
 
-    {!pulseChatUser&&!spontaneousTarget&&!creating&&!selectedChat&&<>
+  // ── Render ────────────────────────────────────────────────────────────────
+  var outerShell = { background: BG_OUTER, minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "stretch", fontFamily: font, userSelect: "none", WebkitUserSelect: "none", WebkitTapHighlightColor: "transparent", overflowX: "hidden", width: "100%", flex: 1 };
+  var phoneCard = { background: BG, width: "100%", flex: 1, display: "flex", flexDirection: "column", position: "relative", boxSizing: "border-box" };
 
-    <div style={{padding:"14px 18px 11px",borderBottom:"2px solid "+INK,display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:52}}>
-      <span style={{fontWeight:900,fontSize:20,letterSpacing:4,textTransform:"uppercase",color:INK}}>Circle</span>
-      <div style={{display:"flex",alignItems:"center",gap:10}}>
-        {bumpActive&&(<div onClick={()=>{setTab("pulse");setBumpActive(false);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"3px 8px",border:"1px solid "+INK}}>
-          <span style={{fontSize:10,transform:`scale(${bumpPulse})`,display:"inline-block",transition:"transform 0.05s",color:INK}}>◉</span>
-          <span style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:INK_MID,textTransform:"uppercase"}}>something nearby</span>
-        </div>)}
-        {currentUser.pulseCheck&&!bumpActive&&<span style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:INK_MID,border:"1px solid "+INK_LIGHT,padding:"2px 7px",textTransform:"uppercase"}}>Pulse Check ◉</span>}
-        <span style={{fontSize:10,color:INK_MID,letterSpacing:1.5,fontWeight:600}}>HICKORY HILLS</span>
-      </div>
-    </div>
+  if (!currentUser) return (
+    <div style={outerShell}><div style={phoneCard}>
+      <OnboardingFlow onComplete={u => setCurrentUser(u)} />
+    </div></div>
+  );
 
-    {tab==="map"&&(<div style={{flex:1,display:"flex",flexDirection:"column",position:"relative"}}>
-      <StatusTab currentUser={currentUser} onUpdateStatus={updateStatus} onUpdatePresets={updatePresets}/>
+  var showOverlayScreen = pulseChatUser || spontaneousTarget || creating || selectedChat;
 
-      {hasRadius&&!allChats.some(c=>c.isOwn)&&<div style={{padding:"5px 18px",borderBottom:"1px solid "+INK_LIGHT,fontSize:9,color:INK_MID,fontStyle:"italic"}}>Press and hold to plant a new circle</div>}
-      <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column"}}>
-        <svg ref={svgRef} viewBox="0 0 350 420" width="100%" preserveAspectRatio="xMidYMid meet" style={{display:"block",flex:1,touchAction:"none"}}
-          onMouseDown={onMapDown} onMouseMove={onMapMove} onMouseUp={onMapUp}
-          onTouchStart={onMapDown} onTouchMove={onMapMove} onTouchEnd={onMapUp}>
-          <CityMapLayer panX={panX} panY={panY}/>
-          {[70,130,190,250].map(r=><circle key={r} cx={CX} cy={CY} r={r} fill="none" stroke={INK_LIGHT} strokeWidth="0.8" opacity="0.35"/>)}
-          {drawPhase==="idle"&&(<g><circle cx={CX} cy={CY} r={160} fill="none" stroke={INK_LIGHT} strokeWidth="1.2" strokeDasharray="6 5" opacity="0.5"/><text x={CX} y={CY-172} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK_MID} fontFamily={font} letterSpacing="2">DRAW YOUR CIRCLE</text></g>)}
-          {isDrawing&&drawPath.length>1&&<polyline points={drawPath.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={INK} strokeWidth="1.8" strokeDasharray="4 3" opacity="0.7"/>}
-          {hasRadius&&(<g transform={`translate(${CX},${CY}) scale(${circleScale}) translate(${-CX},${-CY})`}>
-            <path d={wobblyPath(CX,CY,radius,3.7)} fill={INK} fillOpacity="0.04"/>
-            <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke="transparent" strokeWidth="28" style={{cursor:"grab"}} onMouseDown={e=>{dragging.current=true;e.preventDefault();e.stopPropagation();}} onTouchStart={e=>{dragging.current=true;e.stopPropagation();}}/>
-            <path d={wobblyPath(CX,CY,radius,3.7)} fill="none" stroke={INK} strokeWidth="2" style={{pointerEvents:"none"}}/>
-            {[0,90,180,270].map(ang=>{var rad=(ang*Math.PI)/180;var wr=radius+2.2*Math.sin(rad*5+3.7)+.9*Math.sin(rad*11+3.32);var ox=CX+wr*Math.cos(rad-Math.PI/2),oy=CY+wr*Math.sin(rad-Math.PI/2);var nx=Math.cos(rad-Math.PI/2),ny=Math.sin(rad-Math.PI/2);return <line key={ang} x1={ox-nx*7} y1={oy-ny*7} x2={ox+nx*7} y2={oy+ny*7} stroke={INK} strokeWidth="1.5" style={{pointerEvents:"none"}}/>;  })}
-            {isFired&&<PulseRipples cx={CX} cy={CY} maxR={radius} progress={rippleProgress}/>}
-            {isFired&&pulseFired&&<OutwardBurst progress={rippleProgress} cx={CX} cy={CY} radius={radius} particles={outwardParticles}/>}
-            {showReturn&&<InwardRush progress={returnProgress} cx={CX} cy={CY} radius={radius} particles={inwardParticles}/>}
-          </g>)}
-          {hasRadius&&<RadiusEdgeLabel cx={CX} cy={CY} radius={radius} radiusMiles={radiusMiles} visibleCount={visibleChats.length} onReset={resetRadius}/>}
-          <g transform={`translate(${panX},${panY})`}>
-            {plantPos&&<PlantParticles progress={plantHold} px={plantPos.x} py={plantPos.y} stamp={false} particles={plantParticles}/>}
-            {plantPos&&plantStamp>0&&<PlantParticles progress={plantStamp} px={plantPos.x} py={plantPos.y} stamp={true} particles={plantParticles}/>}
-            {plantPos&&plantHold>0&&(<g style={{pointerEvents:"none"}}><line x1={plantPos.x-8} y1={plantPos.y} x2={plantPos.x+8} y2={plantPos.y} stroke={INK} strokeWidth="1.5" opacity={plantHold}/><line x1={plantPos.x} y1={plantPos.y-8} x2={plantPos.x} y2={plantPos.y+8} stroke={INK} strokeWidth="1.5" opacity={plantHold}/></g>)}
-            {nearbyUserCoalesce&&<CoalesceParticles progress={nearbyUserProgress} particles={nearbyUserCoalesce}/>}
-            {nearbyCircleCoalesce&&<CoalesceParticles progress={nearbyCircleProgress} particles={nearbyCircleCoalesce}/>}
-            {nearbyUser&&<NearbyUserMarker user={nearbyUser} cx={CX} cy={CY} progress={nearbyUserProgress} onClick={()=>setShowPersonCard(true)}/>}
-            {nearbyCircle&&<NearbyCircleMarker circle={nearbyCircle} cx={CX} cy={CY} progress={nearbyCircleProgress} onClick={()=>setShowCircleCard(true)}/>}
-            {allChats.map(c=><ChatMarker key={c.id} chat={c} cx={CX} cy={CY} onClick={handleChatClick} radius={radius} revealProgress={revealProgress[c.id]||0} highlighted={highlightedCircleId===c.id} panX={panX} panY={panY}/>)}
-            {/* Placed note envelopes — already inside pan group, no extra transform needed */}
-            {notes.filter(n=>n.placed&&n.placedPos).filter(n=>n.visibility!=="hidden"||revealedNoteIds.has(n.id)||n.ownerId===(currentUser?.id||"user_local")).map(n=>(
-              <EnvelopeMarker key={n.id} note={n} x={n.placedPos.x} y={n.placedPos.y} onClick={handleNoteClick} radius={radius} panX={panX} panY={panY} stamping={stampingNoteId===n.id} revealed={revealedNoteIds.has(n.id)} isOwn={n.ownerId===(currentUser?.id||"user_local")}/>
-            ))}
-          </g>
-          <circle cx={CX} cy={CY} r={7*breathe} fill="none" stroke={INK} strokeWidth="0.8" opacity={0.2} style={{pointerEvents:"none"}}/>
-          <circle cx={CX} cy={CY} r={4} fill={INK} style={{pointerEvents:"none"}}/>
-          <circle cx={CX} cy={CY} r={1.5} fill={BG} style={{pointerEvents:"none"}}/>
-          <text x={CX+8} y={CY+13} fontSize="8" fill={INK_MID} fontFamily={font} letterSpacing="1" fontWeight="600" style={{pointerEvents:"none"}}>{currentUser.handle.toUpperCase()}</text>
-        </svg>
-        {(panX!==0||panY!==0)&&(
-          <button onClick={()=>{setPanX(0);setPanY(0);}} title="Return to me" style={{position:"absolute",bottom:14,left:14,width:36,height:36,background:BG,border:"1.5px solid "+INK,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",zIndex:40,boxShadow:"1px 1px 0 "+INK_LIGHT,fontFamily:font,fontSize:14,lineHeight:1}}>◎</button>
-        )}
+  return (
+    <>
+      <div style={outerShell}><div style={phoneCard}>
 
-        {/* Notes side tab */}
-        {!notesPanelOpen&&!placingNote&&(
-          <button onClick={()=>{setNotesPanelOpen(true);setNotesView("list");}} style={{
-            position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",
-            background:NOTE_BG,border:"1.5px solid "+INK,borderRight:"none",
-            width:38,padding:"16px 0",cursor:"pointer",zIndex:50,
-            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
-            boxShadow:"-1px 1px 0 "+INK_LIGHT,
-          }}>
-            {/* Paper pad icon */}
-            <svg width={16} height={18} viewBox="0 0 16 18">
-              <rect x={1} y={2} width={14} height={15} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="0.5"/>
-              <rect x={5} y={0} width={2} height={4} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="0.5"/>
-              <rect x={9} y={0} width={2} height={4} fill={NOTE_BG} stroke={INK} strokeWidth="1.2" rx="0.5"/>
-              <line x1={4} y1={8} x2={12} y2={8} stroke={INK} strokeWidth="1" strokeLinecap="round"/>
-              <line x1={4} y1={11} x2={12} y2={11} stroke={INK} strokeWidth="1" strokeLinecap="round"/>
-              <line x1={4} y1={14} x2={9} y2={14} stroke={INK} strokeWidth="1" strokeLinecap="round"/>
+        {/* ── Portal overlays ── */}
+        {joinTarget && <JoinModal chat={joinTarget} onClose={() => setJoinTarget(null)} onJoined={handleJoined} onRequestSent={handleRequestSent} />}
+        {showPersonCard && nearbyUser && <PulseCheckCard user={nearbyUser} currentUser={currentUser} onStartPulseChat={openPulseChat} onDismiss={dismissPerson} />}
+        {showCircleCard && nearbyCircle && <CirclePulseCard circle={nearbyCircle} currentUser={currentUser} onJoin={openCircleJoin} onDismiss={dismissCircle} />}
+        {interestMatchCircle && <InterestMatchNotif circle={interestMatchCircle} sharedTags={interestMatchTags} onGo={() => goToInterestMatch(interestMatchCircle)} onDismiss={() => setInterestMatchCircle(null)} />}
+        {readingNote && <ReadNoteModal note={readingNote} onClose={() => setReadingNote(null)} smoothed={smoothedNoteIds.has(readingNote.id)} />}
+        {crumpledNote && <CrumpledNoteReveal note={crumpledNote} onSmoothed={handleNoteSmoothed} onCancel={() => setCrumpledNote(null)} />}
+        {unfoldingNote && <UnfoldModal note={unfoldingNote} />}
+
+        {/* Hidden note discovery notification */}
+        {hiddenNoteNotif && (
+          <div onClick={() => { setHiddenNoteNotif(null); setCrumpledNote(hiddenNoteNotif); }} style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: INK, color: NOTE_BG, padding: "10px 18px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontFamily: font, animation: "noteUnfold 0.3s ease" }}>
+            <svg width={16} height={12} viewBox="0 0 16 12">
+              <rect x={0} y={0} width={16} height={12} fill="none" stroke={NOTE_BG} strokeWidth="1" rx="0.5" />
+              <polyline points="0,0 8,6.5 16,0" fill="none" stroke={NOTE_BG} strokeWidth="0.9" />
             </svg>
-            {notes.filter(n=>!n.placed).length>0&&(
-              <div style={{width:14,height:14,borderRadius:"50%",background:INK,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <span style={{fontSize:8,fontWeight:900,color:NOTE_BG,lineHeight:1}}>{notes.filter(n=>!n.placed).length}</span>
-              </div>
-            )}
-          </button>
-        )}
-
-        {/* Notes slide panel */}
-        <div style={{
-          position:"absolute",top:0,right:0,bottom:0,
-          width:"88%",maxWidth:320,
-          background:BG,borderLeft:"2px solid "+INK,
-          transform:notesPanelOpen?"translateX(0)":"translateX(100%)",
-          transition:"transform 0.3s cubic-bezier(0.22,1,0.36,1)",
-          zIndex:60,display:"flex",flexDirection:"column",
-          boxShadow:notesPanelOpen?"-4px 0 0 "+INK_LIGHT:"none",
-          pointerEvents:notesPanelOpen?"auto":"none",
-        }}>
-          {notesView==="list"&&(
-            <NotesPanel
-              notes={notes}
-              onClose={()=>setNotesPanelOpen(false)}
-              onCompose={()=>setNotesView("compose")}
-              onPlace={startPlacingNote}
-              onReadNote={setReadingNote}
-            />
-          )}
-          {notesView==="compose"&&(
-            <NoteCompose
-              onFinish={finishNote}
-              onCancel={()=>setNotesView("list")}
-            />
-          )}
-        </div>
-
-        {/* Placement mode banner */}
-        {placingNote&&(
-          <div style={{
-            position:"absolute",top:0,left:0,right:0,zIndex:70,
-            background:INK,color:NOTE_BG,
-            padding:"10px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",
-            fontFamily:font,
-          }}>
-            <span style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>Tap map to place note</span>
-            <button onClick={()=>setPlacingNoteSync(null)} style={{background:"none",border:"1px solid "+NOTE_BG,color:NOTE_BG,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"4px 10px"}}>Cancel</button>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" }}>Hidden note found nearby</div>
+              <div style={{ fontSize: 8, opacity: 0.6, marginTop: 1 }}>tap to reveal</div>
+            </div>
+            <button onClick={e => { e.stopPropagation(); setHiddenNoteNotif(null); }} style={{ background: "none", border: "none", color: NOTE_BG, fontSize: 16, cursor: "pointer", opacity: 0.5, padding: 0 }}>×</button>
           </div>
         )}
 
-        {mapDimProgress>0&&<div style={{position:"absolute",inset:0,background:INK,opacity:mapDimProgress,pointerEvents:"none",transition:"opacity 0.08s"}}/>}
-      </div>
-    </div>)}
+        {/* ── Pulse chat + spontaneous circle ── */}
+        {pulseChatUser && <>
+          {spontaneousTarget && <SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={() => setSpontaneousTarget(null)} />}
+          <PulseChat currentUser={currentUser} otherUser={pulseChatUser} onStartCircle={openSpontaneousSheet} onConnect={handleConnect} onDismiss={closePulseChat} />
+        </>}
+        {spontaneousTarget && !pulseChatUser && <SpontaneousCircleSheet currentUser={currentUser} otherUser={spontaneousTarget.user} sharedTags={spontaneousTarget.sharedTags} onCreate={handleSpontaneousCreate} onDismiss={() => setSpontaneousTarget(null)} />}
 
-    {/* Read note modal — available on any tab */}
-    {readingNote&&<ReadNoteModal note={readingNote} onClose={()=>setReadingNote(null)} smoothed={smoothedNoteIds.has(readingNote.id)}/>}
-    {/* Crumpled note smoothing reveal */}
-    {crumpledNote&&<CrumpledNoteReveal note={crumpledNote} onSmoothed={handleNoteSmoothed} onCancel={()=>setCrumpledNote(null)}/>}
-    {/* Unfold animation before read modal */}
-    {unfoldingNote&&<UnfoldModal note={unfoldingNote}/>}
+        {/* ── Create flow ── */}
+        {creating && <CreateFlow onComplete={handleCreateComplete} onCancel={() => { setCreating(false); setPendingPos(null); }} />}
 
-    {tab==="circles"&&(<div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain"}}>
-      {!hasRadius&&<div style={{padding:"32px 18px",color:INK_MID,fontSize:13,fontStyle:"italic",textAlign:"center"}}>Draw your circle on the map first.</div>}
-      {hasRadius&&allChats.map(c=>{
-        var color=circleColor(c),isHidden=c.type==="hidden",isRevealed=revealedIds.has(c.id),isJoined=joinedIds.has(c.id);
-        if(isHidden&&!isRevealed)return null;
-        var sharedTags=(currentUser.tags||[]).filter(t=>c.tags.includes(t));
-        // Full opacity: own circles, joined circles, open circles within radius
-        // Dimmed: closed (not joined), revealed-not-joined hidden, open outside radius
-        var circleScreenR=c.r; // SVG units — proxy for distance
-        var inRadius=circleScreenR<=radius;
-        var isActive=c.isOwn||isJoined||(c.type==="open"&&inRadius);
-        return(<div key={c.id} onClick={()=>handleChatClick(c)} style={{padding:"15px 18px",borderBottom:"1px solid "+INK_LIGHT,cursor:"pointer",display:"flex",flexDirection:"column",gap:6,minHeight:64,opacity:isActive?1:0.4,transition:"opacity 0.2s"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:11,height:11,borderRadius:"50%",flexShrink:0,background:c.type==="open"?color:"none",border:"2px "+(c.type==="hidden"?"dashed":"solid")+" "+color}}/>
-              <div><div style={{fontWeight:900,fontSize:14,color:INK}}>{isHidden&&!isJoined?"???":c.name}</div><div style={{fontSize:10,color:INK_MID,marginTop:2,display:"flex",alignItems:"center",gap:4}}>{c.dist}mi{c.members?" · "+c.members+" members":""}{c.governance&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}> · {c.governance.mode==="democracy"?<FistIcon size={14}/>:<SpectaclesIcon size={12}/>}</span>}</div></div>
-            </div>
-            <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",border:"1.5px "+(c.type==="hidden"?"dashed":"solid")+" "+color,padding:"4px 8px",color:c.type==="open"?BG:color,background:c.type==="open"?color:"none",flexShrink:0}}>{isHidden?(isJoined?"hidden":"?"):c.type}</div>
-          </div>
-          {sharedTags.length>0&&!isHidden&&(<div style={{display:"flex",alignItems:"center",gap:5,paddingLeft:21}}><span style={{fontSize:8,color:INK_MID}}>shared:</span>{sharedTags.map(t=><span key={t} style={{fontSize:7.5,fontWeight:700,letterSpacing:1,textTransform:"uppercase",background:INK,color:BG,padding:"1px 6px"}}>{t}</span>)}</div>)}
-        </div>);
-      })}
-    </div>)}
+        {/* ── Chat view ── */}
+        {selectedChat && !pulseChatUser && !creating && (
+          <ChatView
+            selectedChat={selectedChat}
+            currentUser={currentUser}
+            msgs={msgs}
+            msgInput={msgInput}
+            setMsgInput={setMsgInput}
+            onBack={() => setSelectedChat(null)}
+            onSendMsg={sendMsg}
+            onEditCircle={() => setEditingCircle(liveChat)}
+          />
+        )}
 
-    {tab==="pulse"&&(<div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:16,padding:"20px 24px",overflowY:"auto",overscrollBehavior:"contain"}}>
-      {bumpActive&&(<div style={{width:"100%",background:INK,color:BG,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-        <span style={{fontSize:14,transform:`scale(${bumpPulse})`,display:"inline-block"}}>◉</span>
-        <div><div style={{fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>Something nearby</div><div style={{fontSize:9,opacity:.7}}>Fire a pulse to find out what it is.</div></div>
-      </div>)}
-      <div style={{fontSize:10,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>{pulseLabel}</div>
-      <div style={{position:"relative",width:BTN_R*2+80,height:BTN_R*2+80,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
-        onMouseDown={startPulseHold} onMouseUp={cancelPulseHold} onMouseLeave={cancelPulseHold}
-        onTouchStart={e=>{e.preventDefault();startPulseHold(e);}} onTouchEnd={cancelPulseHold}>
-        <svg width={BTN_R*2+80} height={BTN_R*2+80} viewBox={(-40)+" "+(-40)+" "+(BTN_R*2+80)+" "+(BTN_R*2+80)} style={{overflow:"visible"}}>
-          {isCharging&&<PulseParticles progress={holdProgress} tx={touchPt.x} ty={touchPt.y} fired={false} particles={pulseParticles}/>}
-          {isFired&&pulseFired&&<PulseParticles progress={rippleProgress} tx={touchPt.x} ty={touchPt.y} fired={true} particles={pulseParticles}/>}
-          {isFired&&!showReturn&&<BleedRings progress={rippleProgress} cx={BTN_R} cy={BTN_R} btnR={BTN_R}/>}
-          {showReturn&&<circle cx={BTN_R} cy={BTN_R} r={STAGE_R} fill="none" stroke={INK} strokeWidth="0.5" opacity={0.15}/>}
-          {showReturn&&<circle cx={BTN_R} cy={BTN_R} r={Math.max(BTN_R,retR)} fill="none" stroke={INK} strokeWidth="1.5" opacity={retOp} style={{pointerEvents:"none"}}/>}
-          <circle cx={BTN_R} cy={BTN_R} r={BTN_R} fill={BG}/>
-          <defs><clipPath id="btnClip"><circle cx={BTN_R} cy={BTN_R} r={BTN_R-1}/></clipPath></defs>
-          <circle cx={BTN_R} cy={BTN_R} r={BTN_R-1} fill="none" stroke={INK} strokeWidth="2"/>
-          <text x={BTN_R} y={BTN_R+5} textAnchor="middle" fontSize="11" fontWeight="900" fill={INK} fontFamily={font} letterSpacing="3" style={{pointerEvents:"none"}}>PULSE</text>
-        </svg>
-      </div>
-      <div style={{width:"100%",borderTop:"1px solid "+INK_LIGHT,paddingTop:20,display:"flex",flexDirection:"column",gap:12,alignItems:"center"}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID}}>Pulse Check</div>
-        <div style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 16px",border:"2px solid "+(currentUser.pulseCheck?INK:INK_LIGHT),justifyContent:"space-between"}}>
-          <div><div style={{fontWeight:700,fontSize:12,color:currentUser.pulseCheck?INK:INK_MID}}>{currentUser.pulseCheck?"Active — you're discoverable":"Off — you're invisible"}</div><div style={{fontSize:9,color:INK_MID,marginTop:3,lineHeight:1.6}}>{currentUser.pulseCheck?"Others with Pulse Check on can find you nearby.":"Enable to connect with people and circles around you."}</div></div>
-          <div onClick={()=>setCurrentUser(u=>({...u,pulseCheck:!u.pulseCheck}))} style={{width:36,height:20,borderRadius:10,background:currentUser.pulseCheck?INK:INK_LIGHT,position:"relative",cursor:"pointer",transition:"background 0.15s",flexShrink:0}}><div style={{position:"absolute",top:3,left:currentUser.pulseCheck?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
-        </div>
-
-        <div style={{width:"100%",padding:"14px 16px",border:"1.5px solid "+INK_LIGHT,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-          <div style={{minWidth:0}}>
-            <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:3}}>Your Status</div>
-            <div style={{fontSize:12,fontStyle:"italic",color:currentUser.status?INK:INK_LIGHT,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              {currentUser.status?`"${currentUser.status}"`:"not set"}
+        {/* ── Main app shell ── */}
+        {!showOverlayScreen && <>
+          <div style={{ padding: "14px 18px 11px", borderBottom: "2px solid " + INK, display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 52 }}>
+            <span style={{ fontWeight: 900, fontSize: 20, letterSpacing: 4, textTransform: "uppercase", color: INK }}>Circle</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {bumpActive && (
+                <div onClick={() => { setTab("pulse"); setBumpActive(false); }} style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", padding: "3px 8px", border: "1px solid " + INK }}>
+                  <span style={{ fontSize: 10, transform: `scale(${bumpPulse})`, display: "inline-block", transition: "transform 0.05s", color: INK }}>◉</span>
+                  <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 1.5, color: INK_MID, textTransform: "uppercase" }}>something nearby</span>
+                </div>
+              )}
+              {currentUser.pulseCheck && !bumpActive && <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: 1.5, color: INK_MID, border: "1px solid " + INK_LIGHT, padding: "2px 7px", textTransform: "uppercase" }}>Pulse Check ◉</span>}
+              <span style={{ fontSize: 10, color: INK_MID, letterSpacing: 1.5, fontWeight: 600 }}>HICKORY HILLS</span>
             </div>
           </div>
-          <button onClick={()=>setTab("map")} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontWeight:700,fontSize:8,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",padding:"5px 10px",flexShrink:0,minHeight:32}}>Edit →</button>
-        </div>
 
-        {currentUser.pulseCheck&&(<div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
-          <button onClick={simulatePersonPulse} disabled={!!(nearbyUser||nearbyCircle)} style={{width:"100%",background:(nearbyUser||nearbyCircle)?"none":INK,color:(nearbyUser||nearbyCircle)?INK_LIGHT:BG,border:"2px solid "+((nearbyUser||nearbyCircle)?INK_LIGHT:INK),padding:"13px 0",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:(nearbyUser||nearbyCircle)?"default":"pointer"}}>
-            {nearbyUser?"Signal active...":"Simulate Nearby Person →"}
-          </button>
-          {(()=>{var allFound=PULSE_CIRCLES.every(c=>allChats.some(x=>x.id===c.id));var busy=!!(nearbyUser||nearbyCircle);return(<button onClick={simulateCirclePulse} disabled={busy||allFound} style={{width:"100%",background:(busy||allFound)?"none":BG,color:(busy||allFound)?INK_LIGHT:INK,border:"2px solid "+((busy||allFound)?INK_LIGHT:INK),padding:"13px 0",fontFamily:font,fontWeight:700,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:(busy||allFound)?"default":"pointer"}}>
-            {nearbyCircle?"Signal active...":allFound?"All nearby circles found":"Simulate Nearby Circle →"}
-          </button>);})()}
-        </div>)}
-        {pulseState==="idle"&&!bumpActive&&<div style={{fontSize:11,color:INK_MID,textAlign:"center",lineHeight:1.8,maxWidth:260}}>A pulse signals your presence — and may reveal hidden circles nearby.</div>}
-      </div>
-    </div>)}
+          {tab === "map" && (
+            <MapView
+              currentUser={currentUser}
+              onUpdateStatus={updateStatus}
+              onUpdatePresets={updatePresets}
+              svgRef={svgRef}
+              panX={panX} panY={panY}
+              drawPhase={drawPhase} drawPath={drawPath}
+              radius={radius} circleScale={circleScale}
+              breathe={breathe}
+              hasRadius={hasRadius} isDrawing={isDrawing}
+              radiusMiles={radiusMiles} visibleChats={visibleChats}
+              isFired={isFired} pulseFired={pulseFired}
+              rippleProgress={rippleProgress} returnProgress={returnProgress}
+              showReturn={showReturn}
+              outwardParticles={outwardParticles} inwardParticles={inwardParticles}
+              nearbyUser={nearbyUser} nearbyUserProgress={nearbyUserProgress} nearbyUserCoalesce={nearbyUserCoalesce}
+              nearbyCircle={nearbyCircle} nearbyCircleProgress={nearbyCircleProgress} nearbyCircleCoalesce={nearbyCircleCoalesce}
+              mapDimProgress={mapDimProgress}
+              allChats={allChats} revealProgress={revealProgress}
+              highlightedCircleId={highlightedCircleId} joinedIds={joinedIds}
+              plantPos={plantPos} plantHold={plantHold} plantStamp={plantStamp} plantParticles={plantParticles}
+              notes={notes} notesPanelOpen={notesPanelOpen} notesView={notesView}
+              placingNote={placingNote} stampingNoteId={stampingNoteId} revealedNoteIds={revealedNoteIds}
+              onMapDown={onMapDown} onMapMove={onMapMove} onMapUp={onMapUp}
+              onChatClick={handleChatClick} onNoteClick={handleNoteClick}
+              onNearbyUserClick={() => setShowPersonCard(true)}
+              onNearbyCircleClick={() => setShowCircleCard(true)}
+              onResetRadius={resetRadius} onResetPan={() => { setPanX(0); setPanY(0); }}
+              onOpenNotesPanel={() => setNotesPanelOpen(true)}
+              onCloseNotesPanel={() => setNotesPanelOpen(false)}
+              onSetNotesView={setNotesView}
+              onStartPlacingNote={startPlacingNote}
+              onCancelPlacingNote={() => setPlacingNoteSync(null)}
+              onFinishNote={finishNote}
+              onUpdateUser={updateUser}
+            />
+          )}
 
-    {tab==="profile"&&(<div style={{flex:1,display:"flex",flexDirection:"column",overflowY:"auto",overscrollBehavior:"contain"}}>
-      <div style={{padding:"28px 28px 20px",borderBottom:"1px solid "+INK_LIGHT}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:16}}>
-          <UserAvatar tags={currentUser.tags} size={56} color={INK} bg={BG}/>
-          <div style={{flex:1,minWidth:0}}>
-            <input value={currentUser.displayName} onChange={e=>setCurrentUser(u=>({...u,displayName:e.target.value}))} style={{background:"none",border:"none",borderBottom:"1px solid "+INK_LIGHT,outline:"none",fontFamily:font,fontWeight:900,fontSize:16,letterSpacing:2,textTransform:"uppercase",color:INK,width:"100%",padding:"2px 0",marginBottom:4}}/>
-            <input value={currentUser.handle} onChange={e=>setCurrentUser(u=>({...u,handle:e.target.value.replace(/[\s]/g,"")}))} style={{background:"none",border:"none",borderBottom:"1px solid "+INK_LIGHT,outline:"none",fontFamily:font,fontSize:10,letterSpacing:1,color:INK_MID,width:"100%",padding:"2px 0",marginBottom:4}}/>
-            <input value={currentUser.status||""} onChange={e=>setCurrentUser(u=>({...u,status:e.target.value}))} placeholder='"set a status"' style={{background:"none",border:"none",borderBottom:"1px dashed "+INK_LIGHT,outline:"none",fontFamily:font,fontSize:11,fontStyle:"italic",color:INK_MID,width:"100%",padding:"2px 0"}}/>
-          </div>
-        </div>
-        <div style={{marginTop:16}}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:INK_MID,marginBottom:8}}>Your interests</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
-            {currentUser.tags.map(t=>(<span key={t} onClick={()=>setCurrentUser(u=>({...u,tags:u.tags.filter(x=>x!==t)}))} style={{fontSize:8,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",border:"1.5px solid "+INK,padding:"3px 8px",color:INK,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>{t} <span style={{opacity:0.4,fontSize:9}}>x</span></span>))}
-            {currentUser.tags.length<9&&<ProfileTagInput onAdd={tag=>{if(!currentUser.tags.includes(tag))setCurrentUser(u=>({...u,tags:[...u.tags,tag]}));}}/>}
-          </div>
-        </div>
-      </div>
-      <div style={{padding:"20px 28px",borderBottom:"1px solid "+INK_LIGHT}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:12}}>Your Circles</div>
-        {allChats.filter(c=>c.isOwn).length===0
-          ?<div style={{fontSize:11,color:INK_LIGHT,fontStyle:"italic"}}>You haven't planted any circles yet.</div>
-          :allChats.filter(c=>c.isOwn).map(c=>{
-            var col=circleColor(c);
-            return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid "+INK_LIGHT}}>
-              <div style={{width:9,height:9,borderRadius:"50%",background:c.type==="open"?col:"none",border:"2px solid "+col,flexShrink:0}}/>
-              <div onClick={()=>setSelectedChat(c)} style={{fontWeight:700,fontSize:12,color:INK,letterSpacing:.5,flex:1,cursor:"pointer"}}>{c.name}</div>
-              <div style={{fontSize:9,color:INK_MID,letterSpacing:1,textTransform:"uppercase",marginRight:8}}>{c.type}</div>
-              <button onClick={()=>setEditingCircle(c)} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",padding:"4px 8px",cursor:"pointer",minHeight:28}}>Edit</button>
-            </div>);
-          })
-        }
-      </div>
-      <div style={{padding:"20px 28px"}}>
-        <div style={{fontSize:9,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:INK_MID,marginBottom:12}}>Settings</div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:"1px solid "+INK_LIGHT}}>
-          <div><div style={{fontSize:12,color:INK,fontWeight:700}}>Pulse Check</div><div style={{fontSize:9,color:INK_MID,marginTop:2}}>{currentUser.pulseCheck?"Active":"Off"}</div></div>
-          <div onClick={()=>setCurrentUser(u=>({...u,pulseCheck:!u.pulseCheck}))} style={{width:36,height:20,borderRadius:10,background:currentUser.pulseCheck?INK:INK_LIGHT,position:"relative",cursor:"pointer",transition:"background 0.15s",flexShrink:0}}><div style={{position:"absolute",top:3,left:currentUser.pulseCheck?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+INK_LIGHT}}>
-          <div><div style={{fontSize:12,color:INK,fontWeight:600}}>Notifications</div><div style={{fontSize:9,color:INK_MID,marginTop:2}}>{currentUser.notifications?"On — you'll be alerted to activity":"Off"}</div></div>
-          <div onClick={()=>setCurrentUser(u=>({...u,notifications:!u.notifications}))} style={{width:36,height:20,borderRadius:10,background:currentUser.notifications?INK:INK_LIGHT,position:"relative",cursor:"pointer",transition:"background 0.15s",flexShrink:0}}><div style={{position:"absolute",top:3,left:currentUser.notifications?18:3,width:14,height:14,borderRadius:"50%",background:BG,transition:"left 0.15s"}}/></div>
-        </div>
-      </div>
-    </div>)}
+          {tab === "circles" && (
+            <CirclesView
+              hasRadius={hasRadius}
+              allChats={allChats}
+              currentUser={currentUser}
+              joinedIds={joinedIds}
+              revealedIds={revealedIds}
+              radius={radius}
+              onChatClick={handleChatClick}
+            />
+          )}
 
-    <BottomNav tab={tab} setTab={setTab} currentUser={currentUser}/>
-    </>}
-  </div></div>{editingCircle&&<EditCircleModal circle={editingCircle} onSave={handleCircleSave} onClose={()=>setEditingCircle(null)}/>}</>);
+          {tab === "pulse" && (
+            <PulseView
+              currentUser={currentUser}
+              pulseLabel={pulseLabel}
+              bumpActive={bumpActive} bumpPulse={bumpPulse}
+              pulseState={pulseState}
+              holdProgress={holdProgress} rippleProgress={rippleProgress}
+              returnProgress={returnProgress} pulseFired={pulseFired}
+              touchPt={touchPt} pulseParticles={pulseParticles}
+              nearbyUser={nearbyUser} nearbyCircle={nearbyCircle}
+              allChats={allChats}
+              onPulseDown={startPulseHold} onPulseUp={cancelPulseHold} onPulseLeave={cancelPulseHold}
+              onTogglePulseCheck={() => setCurrentUser(u => ({ ...u, pulseCheck: !u.pulseCheck }))}
+              onSimulatePersonPulse={simulatePersonPulse}
+              onSimulateCirclePulse={simulateCirclePulse}
+              onGoToMap={() => setTab("map")}
+            />
+          )}
+
+          {tab === "profile" && (
+            <ProfileView
+              currentUser={currentUser}
+              allChats={allChats}
+              onUpdateUser={updateUser}
+              onSelectChat={setSelectedChat}
+              onEditCircle={setEditingCircle}
+            />
+          )}
+
+          <BottomNav tab={tab} setTab={setTab} currentUser={currentUser} />
+        </>}
+
+      </div></div>
+
+      {/* EditCircleModal renders outside the card so it can overlay everything */}
+      {editingCircle && <EditCircleModal circle={editingCircle} onSave={handleCircleSave} onClose={() => setEditingCircle(null)} />}
+    </>
+  );
 }
