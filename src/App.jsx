@@ -737,7 +737,7 @@ function CityMapLayer({panX,panY}){
 function genPulseParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.55;p.push({angle:a,dist:55+Math.random()*110,size:0.8+Math.random()*2.8,delay:Math.random()*.28,drift:(Math.random()-.5)*4.5,driftFreq:1.2+Math.random()*3.5});}return p;}
 function genOutwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.25;p.push({angle:a,travelMult:1.1+Math.random()*1.8,size:.8+Math.random()*2.2,delay:Math.random()*.22,drift:(Math.random()-.5)*3.5,driftFreq:1.5+Math.random()*3,brightness:.4+Math.random()*.6});}return p;}
 function genInwardParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2+(Math.random()-.5)*.4;p.push({angle:a,spawnMult:1.3+Math.random()*1.4,size:.8+Math.random()*1.8,delay:Math.random()*.28,drift:(Math.random()-.5)*2.8,driftFreq:1.5+Math.random()*2.5,brightness:.35+Math.random()*.65});}return p;}
-function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2;var big=i%4===0;p.push({angle:a+(Math.random()-.5)*.7,scatter:big?(38+Math.random()*22):(16+Math.random()*28),size:big?(1.8+Math.random()*1.4):(0.8+Math.random()*1.4),delay:Math.random()*.25,drift:(Math.random()-.5)*3.2,driftFreq:1.5+Math.random()*3});}return p;}
+function genPlantParticles(c){var p=[];for(var i=0;i<c;i++){var a=(i/c)*Math.PI*2;var big=i%4===0;var giant=i%12===0;p.push({angle:a+(Math.random()-.5)*.7,scatter:giant?(90+Math.random()*60):big?(55+Math.random()*40):(28+Math.random()*42),size:giant?(2.2+Math.random()*1.6):big?(1.6+Math.random()*1.4):(0.7+Math.random()*1.2),delay:Math.random()*.28,drift:(Math.random()-.5)*4,driftFreq:1.5+Math.random()*3});}return p;}
 
 function FistIcon({size=12,color=INK}){
   // Raised solidarity fist — thick pictogram, no detail
@@ -769,9 +769,14 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,panX,p
   var baseOp=hasLens?(inLens?1:0.12):1;
   var transition="opacity 0.25s ease, filter 0.25s ease";
   var prevInLens=useRef(inLens);
-  var [ringPopping,setRingPopping]=useState(false);
+  var [ringVisible,setRingVisible]=useState(inLens);
   useEffect(()=>{
-    if(!prevInLens.current&&inLens){setRingPopping(true);setTimeout(()=>setRingPopping(false),520);}
+    if(!prevInLens.current&&inLens){
+      // Slight delay so circle appears first, then ring fades in
+      var t=setTimeout(()=>setRingVisible(true),160);
+      return()=>clearTimeout(t);
+    }
+    if(prevInLens.current&&!inLens){setRingVisible(false);}
     prevInLens.current=inLens;
   },[inLens]);
 
@@ -793,12 +798,8 @@ function ChatMarker({chat,cx,cy,onClick,radius,revealProgress,highlighted,panX,p
     <circle cx={x} cy={y} r={22} fill="transparent"/>
     {/* Lens ring — static when settled, pops on enter */}
     {hasLens&&inLens&&<circle cx={x} cy={y} r={R+6} fill="none" stroke={color} strokeWidth="2.5"
-      opacity={ringPopping?0:0.35}
-      style={ringPopping?{}:{transition:"opacity 0.2s ease"}}
-    />}
-    {/* Pop burst ring — animates on lens enter */}
-    {ringPopping&&<circle cx={x} cy={y} r={R+6} fill="none" stroke={color} strokeWidth="2.5"
-      style={{animation:"lensRingPop 0.52s cubic-bezier(0.22,1,0.36,1) forwards",transformOrigin:`${x}px ${y}px`,transformBox:"fill-box"}}
+      opacity={ringVisible?0.35:0}
+      style={{transition:"opacity 0.25s ease"}}
     />}
     {highlighted&&<circle cx={x} cy={y} r={R+10} fill="none" stroke={color} strokeWidth="1.5" opacity={0.6} strokeDasharray="3 3"/>}
     {highlighted&&<circle cx={x} cy={y} r={R+18} fill="none" stroke={color} strokeWidth="0.8" opacity={0.25} strokeDasharray="2 4"/>}
@@ -1556,7 +1557,7 @@ function ProfileTagInput({onAdd}){
 export default function App(){
   useEffect(()=>{
     var s=document.createElement("style");
-    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}@keyframes lensRingPop{0%{transform:scale(1);opacity:0;}25%{transform:scale(1.55);opacity:0.6;}60%{transform:scale(0.92);opacity:0.42;}80%{transform:scale(1.08);opacity:0.37;}100%{transform:scale(1);opacity:0.35;}}";
+    s.textContent="*{-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}input,textarea{-webkit-user-select:text;user-select:text;font-size:16px !important;}html{overflow:hidden;position:fixed;width:100%;height:100%;}body{overflow:hidden;position:fixed;width:100%;height:100%;overscroll-behavior:none;}#root{height:100%;width:100%;display:flex;flex-direction:column;}@keyframes envelopeWiggle{0%{transform:rotate(0deg);}20%{transform:rotate(-6deg);}40%{transform:rotate(5deg);}60%{transform:rotate(-3deg);}80%{transform:rotate(2deg);}100%{transform:rotate(0deg);}}@keyframes noteStamp{0%{transform:translateY(-18px) scale(1.15);opacity:0;}60%{transform:translateY(2px) scale(0.96);opacity:1;}80%{transform:translateY(-2px) scale(1.02);}100%{transform:translateY(0) scale(1);}}@keyframes noteUnfold{0%{transform:scaleY(0.05) scaleX(0.7);opacity:0;}60%{transform:scaleY(1.05) scaleX(1);}100%{transform:scaleY(1) scaleX(1);opacity:1;}}";
     document.head.appendChild(s);
     return()=>s.remove();
   },[]);
@@ -1925,7 +1926,11 @@ export default function App(){
 
   useEffect(()=>{window.addEventListener("mousemove",onMapMove);window.addEventListener("mouseup",onMapUp);window.addEventListener("touchmove",onMapMove,{passive:false});window.addEventListener("touchend",onMapUp);return()=>{window.removeEventListener("mousemove",onMapMove);window.removeEventListener("mouseup",onMapUp);window.removeEventListener("touchmove",onMapMove);window.removeEventListener("touchend",onMapUp);};},[onMapMove,onMapUp]);
 
-  function handleChatClick(chat){if(chat.type==="hidden"&&!joinedIds.has(chat.id)){setJoinTarget(chat);return;}setSelectedChat(chat);}
+  function handleChatClick(chat){
+    if(chat.type==="hidden"&&!joinedIds.has(chat.id)){setJoinTarget(chat);return;}
+    if(chat.type==="closed"&&!joinedIds.has(chat.id)&&!chat.isOwn){setJoinTarget(chat);return;}
+    setSelectedChat(chat);
+  }
   function handleJoined(chat){setJoinedIds(prev=>new Set([...prev,chat.id]));setJoinTarget(null);if(chat.msgs!==undefined)setSelectedChat(chat);}
   function handleRequestSent(chatId,req){setAllChats(prev=>prev.map(c=>c.id===chatId?{...c,pendingRequests:[...(c.pendingRequests||[]),req]}:c));}
   const handleCreateComplete=useCallback((data)=>{
@@ -2011,7 +2016,7 @@ export default function App(){
       <div style={{padding:"16px 18px",borderBottom:"1.5px solid "+INK,display:"flex",alignItems:"center",gap:14,minHeight:56}}>
         <button onClick={()=>setSelectedChat(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:INK,padding:"0 8px 0 0",minWidth:44,minHeight:44,display:"flex",alignItems:"center"}}>&#8592;</button>
         <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}><div style={{width:11,height:11,borderRadius:"50%",background:chatColor,flexShrink:0}}/><div><div style={{fontWeight:900,fontSize:15,letterSpacing:1,textTransform:"uppercase",color:INK}}>{selectedChat.name}</div><div style={{fontSize:10,color:INK_MID,letterSpacing:.8,marginTop:2}}>{selectedChat.type.toUpperCase()} · {selectedChat.dist}mi</div></div></div>
-        {selectedChat.isOwn&&<button onClick={()=>setEditingCircle(selectedChat)} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",padding:"5px 10px",cursor:"pointer",minHeight:32,flexShrink:0}}>Edit</button>}
+        {selectedChat.isOwn&&<button onClick={()=>setEditingCircle(liveChat)} style={{background:"none",border:"1px solid "+INK_LIGHT,color:INK_MID,fontFamily:font,fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",padding:"5px 10px",cursor:"pointer",minHeight:32,flexShrink:0}}>Edit</button>}
       </div>
       {selectedChat.tags&&selectedChat.tags.length>0&&<div style={{padding:"8px 18px",borderBottom:"1px solid "+INK_LIGHT,display:"flex",gap:6,flexWrap:"wrap"}}>{selectedChat.tags.map(t=><span key={t} style={{fontSize:8,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",border:"1px solid "+INK_LIGHT,padding:"2px 7px",color:INK_MID}}>{t}</span>)}</div>}
       <div style={{flex:1,padding:"16px 18px",overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>{msgs.map((m,i)=>(<div key={m.id||i} style={{paddingBottom:10,borderBottom:"1px solid "+INK_LIGHT}}><div style={{fontSize:8,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:m.senderId===currentUser.id?INK:INK_MID,marginBottom:3}}>{m.senderId===currentUser.id?"You":m.senderHandle}</div><div style={{fontSize:14,lineHeight:1.65,color:INK}}>{m.text}</div></div>))}{msgs.length===0&&<div style={{color:INK_MID,fontSize:13,fontStyle:"italic"}}>No messages yet. Say something.</div>}</div>
@@ -2161,7 +2166,11 @@ export default function App(){
         var color=circleColor(c),isHidden=c.type==="hidden",isRevealed=revealedIds.has(c.id),isJoined=joinedIds.has(c.id);
         if(isHidden&&!isRevealed)return null;
         var sharedTags=(currentUser.tags||[]).filter(t=>c.tags.includes(t));
-        var isActive=isJoined||c.isOwn;
+        // Full opacity: own circles, joined circles, open circles within radius
+        // Dimmed: closed (not joined), revealed-not-joined hidden, open outside radius
+        var circleScreenR=c.r; // SVG units — proxy for distance
+        var inRadius=circleScreenR<=radius;
+        var isActive=c.isOwn||isJoined||(c.type==="open"&&inRadius);
         return(<div key={c.id} onClick={()=>handleChatClick(c)} style={{padding:"15px 18px",borderBottom:"1px solid "+INK_LIGHT,cursor:"pointer",display:"flex",flexDirection:"column",gap:6,minHeight:64,opacity:isActive?1:0.4,transition:"opacity 0.2s"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
