@@ -1603,7 +1603,7 @@ export default function App(){
   var drawPhaseRef=useRef("idle");
   function setDrawPhaseSync(v){drawPhaseRef.current=v;setDrawPhase(v);}
   var [drawPath,setDrawPath]=useState([]);
-  var [liveRadius,setLiveRadius]=useState(0);
+  var [,setLiveRadius]=useState(0);
   var [circleScale,setCircleScale]=useState(1);
   var [selectedChat,setSelectedChat]=useState(null);
   var [joinTarget,setJoinTarget]=useState(null);
